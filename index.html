@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#0f766e" />
+  <meta name="description" content="Sistema de acompanhamento da estratificação de risco na Atenção Primária." />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>EXRisco | Estratificação de Risco</title>
+</head>
+<body>
+  <div id="loadingScreen" class="loading-screen">
+    <div class="brand-mark large">ER</div>
+    <div class="spinner"></div>
+    <p>Carregando EXRisco...</p>
+  </div>
+
+  <main id="loginView" class="login-view hidden">
+    <section class="login-panel">
+      <div class="login-brand">
+        <div class="brand-mark">ER</div>
+        <div>
+          <h1>EXRisco</h1>
+          <p>Estratificação e vigilância em saúde</p>
+        </div>
+      </div>
+      <div class="login-copy">
+        <span class="eyebrow">Atenção Primária</span>
+        <h2>Acompanhe riscos e retornos sem perder o histórico do paciente.</h2>
+        <p>Hipertensão, diabetes, gestação e saúde da criança em um único prontuário de vigilância, organizado por posto de saúde.</p>
+      </div>
+      <div class="login-badges">
+        <span>Dados por unidade</span><span>Histórico de alterações</span><span>PWA</span>
+      </div>
+    </section>
+
+    <section class="login-card-wrap">
+      <form id="loginForm" class="login-card">
+        <span class="eyebrow">Acesso restrito</span>
+        <h2>Entrar no sistema</h2>
+        <p class="muted">Use o usuário cadastrado no Firebase Authentication.</p>
+        <label class="field">
+          <span>E-mail</span>
+          <input id="loginEmail" type="email" autocomplete="username" required placeholder="usuario@saude.gov.br" />
+        </label>
+        <label class="field">
+          <span>Senha</span>
+          <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="••••••••" />
+        </label>
+        <button class="btn primary wide" type="submit">Entrar</button>
+        <p id="loginError" class="form-error hidden"></p>
+      </form>
+    </section>
+  </main>
+
+  <div id="appView" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark">ER</div>
+        <div><strong>EXRisco</strong><span>Vigilância em saúde</span></div>
+      </div>
+      <nav class="nav-list">
+        <button class="nav-item active" data-view="dashboard"><span class="nav-icon">⌂</span><span>Visão geral</span></button>
+        <button class="nav-item" data-view="pacientes"><span class="nav-icon">◎</span><span>Pacientes</span></button>
+        <button class="nav-item admin-only hidden" data-view="postos"><span class="nav-icon">＋</span><span>Postos de saúde</span></button>
+        <button class="nav-item admin-only hidden" data-view="usuarios"><span class="nav-icon">♙</span><span>Usuários</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button id="openCalculatorBtn" class="calculator-btn"><span>▦</span><span><strong>Calculadora de risco</strong><small>Ferramenta auxiliar</small></span></button>
+        <div class="user-mini">
+          <div id="userInitials" class="avatar">U</div>
+          <div class="user-mini-copy"><strong id="userName">Usuário</strong><span id="userUnit">Unidade</span></div>
+          <button id="logoutBtn" class="icon-btn" title="Sair">↪</button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="main-area">
+      <header class="topbar">
+        <button id="mobileMenuBtn" class="icon-btn mobile-menu" aria-label="Abrir menu">☰</button>
+        <div>
+          <p class="eyebrow" id="pageEyebrow">Painel</p>
+          <h1 id="pageTitle">Visão geral</h1>
+        </div>
+        <div class="topbar-actions">
+          <span id="syncState" class="sync-pill">● Online</span>
+          <button id="quickCalculatorBtn" class="btn ghost">▦ Calculadora</button>
+          <button id="quickAddPatientBtn" class="btn primary">+ Novo paciente</button>
+        </div>
+      </header>
+
+      <section id="view-dashboard" class="view active">
+        <div class="dashboard-head">
+          <div>
+            <h2 id="dashboardGreeting">Acompanhamento da unidade</h2>
+            <p class="muted">Situação atual dos pacientes ativos e principais pendências.</p>
+          </div>
+          <label id="dashboardPostoWrap" class="compact-field admin-only hidden">
+            <span>Posto</span>
+            <select id="dashboardPostoFilter"><option value="">Todos os postos</option></select>
+          </label>
+        </div>
+
+        <div class="kpi-grid">
+          <article class="kpi-card"><div class="kpi-icon">◎</div><div><span>Pacientes ativos</span><strong id="kpiTotal">0</strong><small id="kpiTotalSub">cadastrados</small></div></article>
+          <article class="kpi-card danger"><div class="kpi-icon">!</div><div><span>Alto risco</span><strong id="kpiHigh">0</strong><small id="kpiHighSub">prioridade de acompanhamento</small></div></article>
+          <article class="kpi-card warning"><div class="kpi-icon">◷</div><div><span>Retornos vencidos</span><strong id="kpiOverdue">0</strong><small>data de retorno ultrapassada</small></div></article>
+          <article class="kpi-card info"><div class="kpi-icon">✓</div><div><span>Exames pendentes</span><strong id="kpiPending">0</strong><small>pendentes ou solicitados</small></div></article>
+        </div>
+
+        <div class="program-grid" id="programCards"></div>
+
+        <div class="dashboard-grid">
+          <article class="panel">
+            <div class="panel-head"><div><h3>Próximos retornos</h3><p>Vencidos e próximos 30 dias</p></div><button class="text-btn" data-go-patients="overdue">Ver pacientes</button></div>
+            <div id="upcomingList" class="stack-list"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div><h3>Distribuição de risco</h3><p>Maior risco registrado por paciente</p></div></div>
+            <div id="riskDistribution" class="risk-distribution"></div>
+          </article>
+        </div>
+      </section>
+
+      <section id="view-pacientes" class="view">
+        <div class="toolbar panel">
+          <div class="search-box"><span>⌕</span><input id="patientSearch" type="search" placeholder="Buscar por nome ou CPF" /></div>
+          <select id="programFilter"><option value="">Todos os acompanhamentos</option><option value="hipertensao">Hipertensos</option><option value="diabetes">Diabéticos</option><option value="gestante">Gestantes</option><option value="crianca">Saúde da Criança</option></select>
+          <select id="riskFilter"><option value="">Todos os riscos</option><option value="alto">Alto risco</option><option value="intermediario">Intermediário</option><option value="baixo">Baixo/Habitual</option></select>
+          <select id="patientPostoFilter" class="admin-only hidden"><option value="">Todos os postos</option></select>
+          <select id="patientStatusFilter"><option value="active">Ativos</option><option value="archived">Arquivados</option><option value="all">Todos</option></select>
+          <button id="clearFiltersBtn" class="btn ghost small">Limpar</button>
+        </div>
+        <div class="list-head">
+          <div><strong id="patientCount">0 pacientes</strong><span id="filterSummary" class="muted"></span></div>
+          <div class="list-actions"><button id="exportCsvBtn" class="btn ghost small">Exportar CSV</button><button id="printBtn" class="btn ghost small">Imprimir</button><button id="addPatientBtn" class="btn primary small">+ Novo paciente</button></div>
+        </div>
+        <div class="table-card">
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Paciente</th><th>Acompanhamento</th><th>Risco</th><th>Próximo retorno</th><th>ACS</th><th class="admin-only-cell">Posto</th><th></th></tr></thead>
+              <tbody id="patientsTableBody"></tbody>
+            </table>
+          </div>
+          <div id="patientsEmpty" class="empty-state hidden"><div class="empty-icon">◎</div><h3>Nenhum paciente encontrado</h3><p>Ajuste os filtros ou cadastre um novo paciente.</p></div>
+        </div>
+      </section>
+
+      <section id="view-postos" class="view admin-only hidden">
+        <div class="section-actions"><div><h2>Postos de saúde</h2><p class="muted">Unidades que separam usuários e pacientes no sistema.</p></div><button id="addPostoBtn" class="btn primary">+ Novo posto</button></div>
+        <div id="postosGrid" class="cards-grid"></div>
+      </section>
+
+      <section id="view-usuarios" class="view admin-only hidden">
+        <div class="section-actions"><div><h2>Usuários</h2><p class="muted">Acesso administrativo ou vinculado a um único posto.</p></div><button id="addUserBtn" class="btn primary">+ Novo usuário</button></div>
+        <div class="table-card"><div class="table-scroll"><table><thead><tr><th>Usuário</th><th>Perfil</th><th>Posto</th><th>Status</th><th></th></tr></thead><tbody id="usersTableBody"></tbody></table></div></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="patientModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close-modal="patientModal"></div>
+    <div class="modal-dialog patient-dialog">
+      <div class="modal-head"><div><span class="eyebrow">Prontuário de vigilância</span><h2 id="patientModalTitle">Novo paciente</h2></div><button class="icon-btn" data-close-modal="patientModal">×</button></div>
+      <form id="patientForm" class="modal-body">
+        <input id="patientId" type="hidden" />
+        <section class="form-section">
+          <div class="section-title"><span>1</span><div><h3>Identificação</h3><p>Dados centrais, compartilhados entre todos os acompanhamentos.</p></div></div>
+          <div class="form-grid three">
+            <label class="field span-2"><span>Nome completo *</span><input id="patientName" required autocomplete="off" /></label>
+            <label class="field"><span>CPF</span><input id="patientCpf" inputmode="numeric" maxlength="14" placeholder="000.000.000-00" /></label>
+            <label class="field"><span>Data de nascimento *</span><input id="patientBirth" type="date" required /></label>
+            <label class="field"><span>Idade</span><input id="patientAge" disabled placeholder="Calculada automaticamente" /></label>
+            <label id="patientPostoField" class="field admin-only hidden"><span>Posto de saúde *</span><select id="patientPosto"></select></label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title"><span>2</span><div><h3>Acompanhamentos</h3><p>Marque todos os grupos aos quais o paciente pertence.</p></div></div>
+          <div id="programSelector" class="check-grid"></div>
+        </section>
+
+        <section class="form-section">
+          <div class="section-title"><span>3</span><div><h3>Dados de vigilância</h3><p>Os campos abaixo reproduzem a estrutura da planilha, organizados por grupo.</p></div></div>
+          <div id="programForms" class="program-forms"></div>
+        </section>
+      </form>
+      <div class="modal-foot"><div id="patientFormMessage" class="form-error hidden"></div><div class="modal-actions"><button type="button" class="btn ghost" data-close-modal="patientModal">Cancelar</button><button id="savePatientBtn" type="submit" form="patientForm" class="btn primary">Salvar paciente</button></div></div>
+    </div>
+  </div>
+
+  <div id="historyModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal="historyModal"></div>
+    <div class="modal-dialog medium-dialog">
+      <div class="modal-head"><div><span class="eyebrow">Auditoria</span><h2 id="historyTitle">Histórico do paciente</h2></div><button class="icon-btn" data-close-modal="historyModal">×</button></div>
+      <div class="modal-body"><div id="historyList" class="timeline"></div></div>
+    </div>
+  </div>
+
+  <div id="calculatorModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal="calculatorModal"></div>
+    <div class="modal-dialog calculator-dialog">
+      <div class="modal-head"><div><span class="eyebrow">Ferramenta auxiliar</span><h2>Calculadora de Estratificação de Riscos</h2></div><div class="modal-head-actions"><a class="btn ghost small" href="https://calculadora-risco.saude.go.gov.br/" target="_blank" rel="noopener">Abrir em nova aba ↗</a><button class="icon-btn" data-close-modal="calculatorModal">×</button></div></div>
+      <div class="calculator-note">A calculadora é independente do prontuário. Nenhum dado é enviado automaticamente entre as duas ferramentas.</div>
+      <iframe id="calculatorFrame" title="Calculadora de Estratificação de Riscos" loading="lazy"></iframe>
+    </div>
+  </div>
+
+  <div id="postoModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal="postoModal"></div>
+    <div class="modal-dialog small-dialog">
+      <div class="modal-head"><div><span class="eyebrow">Unidade</span><h2 id="postoModalTitle">Novo posto de saúde</h2></div><button class="icon-btn" data-close-modal="postoModal">×</button></div>
+      <form id="postoForm" class="modal-body"><input id="postoId" type="hidden" /><div class="form-grid two"><label class="field span-2"><span>Nome do posto *</span><input id="postoNome" required /></label><label class="field"><span>Sigla</span><input id="postoSigla" maxlength="20" /></label><label class="field"><span>CNES</span><input id="postoCnes" /></label><label class="toggle-field span-2"><input id="postoAtivo" type="checkbox" checked /><span>Posto ativo</span></label></div></form>
+      <div class="modal-foot"><div></div><div class="modal-actions"><button type="button" class="btn ghost" data-close-modal="postoModal">Cancelar</button><button class="btn primary" type="submit" form="postoForm">Salvar</button></div></div>
+    </div>
+  </div>
+
+  <div id="userModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal="userModal"></div>
+    <div class="modal-dialog small-dialog">
+      <div class="modal-head"><div><span class="eyebrow">Acesso</span><h2 id="userModalTitle">Novo usuário</h2></div><button class="icon-btn" data-close-modal="userModal">×</button></div>
+      <form id="userForm" class="modal-body"><input id="editUserUid" type="hidden" /><div class="form-grid two"><label class="field span-2"><span>Nome *</span><input id="newUserName" required /></label><label class="field span-2"><span>E-mail *</span><input id="newUserEmail" type="email" required /></label><label id="newUserPasswordField" class="field span-2"><span>Senha inicial *</span><input id="newUserPassword" type="password" minlength="6" /></label><label class="field"><span>Perfil *</span><select id="newUserRole"><option value="posto">Usuário do posto</option><option value="admin">Administrador geral</option></select></label><label id="newUserPostoField" class="field"><span>Posto *</span><select id="newUserPosto"></select></label><label class="toggle-field span-2"><input id="newUserAtivo" type="checkbox" checked /><span>Usuário ativo</span></label></div><p class="hint" id="userFormHint">A conta será criada no Firebase Authentication e vinculada ao perfil do sistema.</p></form>
+      <div class="modal-foot"><div id="userFormError" class="form-error hidden"></div><div class="modal-actions"><button type="button" class="btn ghost" data-close-modal="userModal">Cancelar</button><button class="btn primary" type="submit" form="userForm">Salvar</button></div></div>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-modal="confirmModal"></div>
+    <div class="modal-dialog confirm-dialog"><div class="confirm-icon">!</div><h2 id="confirmTitle">Confirmar ação</h2><p id="confirmText"></p><div class="modal-actions"><button id="confirmCancel" class="btn ghost">Cancelar</button><button id="confirmOk" class="btn danger-btn">Confirmar</button></div></div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
