@@ -1,0 +1,63 @@
+name: EXRisco Static Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify required files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            index.html styles.css styles-base.css styles-ui.css
+            app.js app-config.js app-patient.js app-admin.js app-main.js
+            manifest.webmanifest sw.js icon.svg firebase.json
+            firestore.rules firestore-rules.txt
+          )
+          for file in "${required[@]}"; do
+            test -s "$file" || { echo "Missing or empty: $file"; exit 1; }
+          done
+
+      - name: Check JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check app-config.js
+          node --check app-patient.js
+          node --check app-admin.js
+          node --check app-main.js
+          node --check sw.js
+          cp app.js /tmp/exrisco-app.mjs
+          node --check /tmp/exrisco-app.mjs
+
+      - name: Check Firestore rule copies
+        run: cmp --silent firestore.rules firestore-rules.txt
+
+      - name: Check local asset references
+        shell: bash
+        run: |
+          set -euo pipefail
+          for asset in styles.css app.js manifest.webmanifest icon.svg; do
+            grep -Fq "./$asset" index.html || { echo "index.html does not reference $asset"; exit 1; }
+          done
+          for asset in styles-base.css styles-ui.css; do
+            grep -Fq "./$asset" styles.css || { echo "styles.css does not reference $asset"; exit 1; }
+          done
+          for asset in app-config.js app-patient.js app-admin.js app-main.js; do
+            grep -Fq "./$asset" app.js || { echo "app.js does not load $asset"; exit 1; }
+          done
+          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-admin.js app-main.js manifest.webmanifest icon.svg; do
+            grep -Fq "./$asset" sw.js || { echo "sw.js cache shell does not include $asset"; exit 1; }
+          done
