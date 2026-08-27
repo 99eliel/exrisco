@@ -1,0 +1,98 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/usuarios/$(request.auth.uid);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(userPath());
+    }
+
+    function profile() {
+      return get(userPath()).data;
+    }
+
+    function activeUser() {
+      return hasProfile() && profile().ativo == true;
+    }
+
+    function isAdmin() {
+      return activeUser() && profile().role == 'admin';
+    }
+
+    function isPostoUser() {
+      return activeUser() && profile().role == 'posto' && profile().postoId is string;
+    }
+
+    function samePosto(postoId) {
+      return isPostoUser() && profile().postoId == postoId;
+    }
+
+    match /usuarios/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow create, update: if isAdmin()
+        && request.resource.data.nome is string
+        && request.resource.data.email is string
+        && request.resource.data.role in ['admin', 'posto']
+        && request.resource.data.ativo is bool
+        && (
+          request.resource.data.role == 'admin'
+          || request.resource.data.postoId is string
+        );
+      allow delete: if false;
+    }
+
+    match /postos/{postoId} {
+      allow read: if activeUser() && (isAdmin() || samePosto(postoId));
+      allow create, update: if isAdmin()
+        && request.resource.data.nome is string
+        && request.resource.data.ativo is bool;
+      allow delete: if false;
+    }
+
+    match /pacientes/{patientId} {
+      allow read: if activeUser() && (isAdmin() || samePosto(resource.data.postoId));
+
+      allow create: if activeUser()
+        && request.resource.data.postoId is string
+        && request.resource.data.nome is string
+        && request.resource.data.programas is list
+        && request.resource.data.ativo is bool
+        && (isAdmin() || samePosto(request.resource.data.postoId));
+
+      allow update: if activeUser()
+        && request.resource.data.postoId is string
+        && request.resource.data.nome is string
+        && request.resource.data.programas is list
+        && request.resource.data.ativo is bool
+        && (
+          isAdmin()
+          || (
+            samePosto(resource.data.postoId)
+            && request.resource.data.postoId == resource.data.postoId
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    match /historico/{historyId} {
+      allow read: if activeUser() && (isAdmin() || samePosto(resource.data.postoId));
+      allow create: if activeUser()
+        && request.resource.data.patientId is string
+        && request.resource.data.postoId is string
+        && request.resource.data.userId == request.auth.uid
+        && (isAdmin() || samePosto(request.resource.data.postoId));
+      allow update, delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
