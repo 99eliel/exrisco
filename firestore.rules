@@ -9,6 +9,14 @@ service cloud.firestore {
       return /databases/$(database)/documents/usuarios/$(request.auth.uid);
     }
 
+    function postoPath(postoId) {
+      return /databases/$(database)/documents/postos/$(postoId);
+    }
+
+    function patientPath(patientId) {
+      return /databases/$(database)/documents/pacientes/$(patientId);
+    }
+
     function hasProfile() {
       return signedIn() && exists(userPath());
     }
@@ -25,16 +33,25 @@ service cloud.firestore {
       return activeUser() && profile().role == 'admin';
     }
 
-    function isPostoUser() {
-      return activeUser() && profile().role == 'posto' && profile().postoId is string;
+    function isPostoProfile() {
+      return activeUser()
+        && profile().role == 'posto'
+        && profile().postoId is string;
+    }
+
+    function isActivePostoUser() {
+      return isPostoProfile()
+        && exists(postoPath(profile().postoId))
+        && get(postoPath(profile().postoId)).data.ativo == true;
     }
 
     function samePosto(postoId) {
-      return isPostoUser() && profile().postoId == postoId;
+      return isActivePostoUser() && profile().postoId == postoId;
     }
 
     match /usuarios/{uid} {
       allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
+
       allow create, update: if isAdmin()
         && request.resource.data.nome is string
         && request.resource.data.email is string
@@ -43,26 +60,44 @@ service cloud.firestore {
         && (
           request.resource.data.role == 'admin'
           || request.resource.data.postoId is string
+        )
+        && (
+          uid != request.auth.uid
+          || (
+            request.resource.data.role == 'admin'
+            && request.resource.data.ativo == true
+          )
         );
+
       allow delete: if false;
     }
 
     match /postos/{postoId} {
-      allow read: if activeUser() && (isAdmin() || samePosto(postoId));
+      // O usuário do posto pode ler o documento da própria unidade mesmo se ela
+      // tiver sido desativada; isso permite que a interface informe o bloqueio.
+      allow read: if activeUser()
+        && (
+          isAdmin()
+          || (isPostoProfile() && profile().postoId == postoId)
+        );
+
       allow create, update: if isAdmin()
         && request.resource.data.nome is string
         && request.resource.data.ativo is bool;
+
       allow delete: if false;
     }
 
     match /pacientes/{patientId} {
-      allow read: if activeUser() && (isAdmin() || samePosto(resource.data.postoId));
+      allow read: if activeUser()
+        && (isAdmin() || samePosto(resource.data.postoId));
 
       allow create: if activeUser()
         && request.resource.data.postoId is string
         && request.resource.data.nome is string
         && request.resource.data.programas is list
         && request.resource.data.ativo is bool
+        && request.resource.data.criadoPor == request.auth.uid
         && (isAdmin() || samePosto(request.resource.data.postoId));
 
       allow update: if activeUser()
@@ -70,6 +105,7 @@ service cloud.firestore {
         && request.resource.data.nome is string
         && request.resource.data.programas is list
         && request.resource.data.ativo is bool
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['criadoEm', 'criadoPor'])
         && (
           isAdmin()
           || (
@@ -82,12 +118,19 @@ service cloud.firestore {
     }
 
     match /historico/{historyId} {
-      allow read: if activeUser() && (isAdmin() || samePosto(resource.data.postoId));
+      allow read: if activeUser()
+        && (isAdmin() || samePosto(resource.data.postoId));
+
       allow create: if activeUser()
         && request.resource.data.patientId is string
         && request.resource.data.postoId is string
+        && request.resource.data.acao is string
+        && request.resource.data.resumo is string
         && request.resource.data.userId == request.auth.uid
+        && exists(patientPath(request.resource.data.patientId))
+        && get(patientPath(request.resource.data.patientId)).data.postoId == request.resource.data.postoId
         && (isAdmin() || samePosto(request.resource.data.postoId));
+
       allow update, delete: if false;
     }
 
