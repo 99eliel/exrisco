@@ -27,6 +27,67 @@ function setLoginBusy(busy) {
   button.textContent = busy ? 'Entrando...' : 'Entrar';
 }
 
+function configureNurseUi() {
+  const nurseNavLabel = document.querySelector('[data-view="usuarios"] span:last-child');
+  if (nurseNavLabel) nurseNavLabel.textContent = 'Enfermeiras';
+
+  const userView = $('#view-usuarios');
+  if (userView) {
+    const title = userView.querySelector('.section-actions h2');
+    const description = userView.querySelector('.section-actions .muted');
+    if (title) title.textContent = 'Enfermeiras responsáveis';
+    if (description) description.textContent = 'Cadastre a enfermeira responsável de cada posto e gerencie o acesso da unidade.';
+  }
+
+  const addUserBtn = $('#addUserBtn');
+  if (addUserBtn) addUserBtn.textContent = '+ Cadastrar enfermeira';
+
+  const headers = $$('#view-usuarios thead th');
+  if (headers[0]) headers[0].textContent = 'Enfermeira / usuário';
+  if (headers[1]) headers[1].textContent = 'Tipo de acesso';
+
+  const nurseOption = $('#newUserRole option[value="posto"]');
+  if (nurseOption) nurseOption.textContent = 'Enfermeira responsável';
+
+  const topbar = document.querySelector('.topbar-actions');
+  if (topbar && !$('#quickAddNurseBtn')) {
+    const button = document.createElement('button');
+    button.id = 'quickAddNurseBtn';
+    button.type = 'button';
+    button.className = 'btn ghost admin-only hidden';
+    button.textContent = '+ Enfermeira';
+    topbar.insertBefore(button, $('#quickAddPatientBtn'));
+  }
+}
+
+function enhancePasswordInput(inputId) {
+  const input = document.getElementById(inputId);
+  if (!input || input.closest('.password-control')) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'password-control';
+  input.parentNode.insertBefore(wrapper, input);
+  wrapper.appendChild(input);
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'password-toggle';
+  button.textContent = 'Mostrar';
+  button.setAttribute('aria-label', 'Mostrar senha');
+  button.addEventListener('click', () => {
+    const visible = input.type === 'text';
+    input.type = visible ? 'password' : 'text';
+    button.textContent = visible ? 'Mostrar' : 'Ocultar';
+    button.setAttribute('aria-label', visible ? 'Mostrar senha' : 'Ocultar senha');
+  });
+  wrapper.appendChild(button);
+}
+
+function bindPasswordToggles() {
+  enhancePasswordInput('loginPassword');
+  enhancePasswordInput('newUserPassword');
+}
+
 function applyProfileUi() {
   const admin = state.profile?.role === 'admin';
   $$('.admin-only').forEach((el) => el.classList.toggle('hidden', !admin));
@@ -240,6 +301,14 @@ function bindPatientEvents() {
   });
 }
 
+function openNurseForm() {
+  openUser();
+  $('#newUserRole').value = 'posto';
+  syncUserRoleField();
+  $('#userModalTitle').textContent = 'Cadastrar enfermeira responsável';
+  $('#userFormHint').textContent = 'Crie o acesso da enfermeira e vincule-a ao posto de responsabilidade. Ela poderá cadastrar e acompanhar pacientes somente daquela unidade.';
+}
+
 function bindAdminEvents() {
   $('#addPostoBtn')?.addEventListener('click', () => openPosto());
   $('#postoForm')?.addEventListener('submit', savePosto);
@@ -251,12 +320,13 @@ function bindAdminEvents() {
     if (posto) openPosto(posto);
   });
 
-  $('#addUserBtn')?.addEventListener('click', () => openUser());
+  $('#addUserBtn')?.addEventListener('click', openNurseForm);
+  $('#quickAddNurseBtn')?.addEventListener('click', openNurseForm);
   $('#userForm')?.addEventListener('submit', saveUser);
   $('#newUserRole')?.addEventListener('change', syncUserRoleField);
   $('#usersTableBody')?.addEventListener('click', (event) => {
     const button = event.target.closest('[data-action="edit-user"]');
-    const row = event.target.closest('[data-user-id]');
+    const row = event.target.closest('tr[data-user-id]');
     if (!button || !row) return;
     const user = state.users.find((u) => u.uid === row.dataset.userId);
     if (user) openUser(user);
@@ -330,6 +400,8 @@ function registerPwa() {
 }
 
 function initializeUi() {
+  configureNurseUi();
+  bindPasswordToggles();
   renderProgramSelector();
   bindGeneratedPatientFields();
   bindNavigation();
