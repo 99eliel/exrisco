@@ -1,10 +1,29 @@
+function responsibleNurseForPosto(postoId) {
+  return state.users.find((user) => user.role === 'posto' && user.postoId === postoId && user.ativo !== false) || null;
+}
+
+function nurseConflictForPosto(postoId, editingUid = '') {
+  return state.users.find((user) => (
+    user.uid !== editingUid
+    && user.role === 'posto'
+    && user.postoId === postoId
+    && user.ativo !== false
+  )) || null;
+}
+
+function roleLabel(role) {
+  if (role === 'admin') return 'Administrador geral';
+  if (role === 'posto') return 'Enfermeira responsável';
+  return 'Perfil não identificado';
+}
+
 function renderPostos() {
   if (state.profile?.role !== 'admin') return;
   $('#postosGrid').innerHTML = state.postos.length ? state.postos.map((p) => {
     const patients = state.patients.filter((patient) => patient.postoId === p.id && patient.ativo !== false).length;
-    const users = state.users.filter((user) => user.postoId === p.id && user.ativo !== false).length;
-    return `<article class="unit-card" data-posto-id="${p.id}"><div class="unit-card-head"><span class="unit-icon">+</span><button class="icon-btn row-icon-btn" data-action="edit-posto">✎</button></div><h3>${escapeHtml(p.nome)}</h3><p>${escapeHtml([p.sigla, p.cnes ? `CNES ${p.cnes}` : ''].filter(Boolean).join(' · ') || 'Sem sigla/CNES informado')}</p><div class="unit-meta"><span class="status-chip${p.ativo === false ? ' off' : ''}">${p.ativo === false ? 'Inativo' : 'Ativo'}</span><span class="mini-badge">${patients} pacientes</span><span class="mini-badge">${users} usuários</span></div></article>`;
-  }).join('') : '<div class="empty-state"><div class="empty-icon">+</div><h3>Nenhum posto cadastrado</h3><p>Cadastre a primeira unidade para começar a organizar os usuários e pacientes.</p></div>';
+    const nurse = responsibleNurseForPosto(p.id);
+    return `<article class="unit-card" data-posto-id="${p.id}"><div class="unit-card-head"><span class="unit-icon">+</span><button class="icon-btn row-icon-btn" data-action="edit-posto">✎</button></div><h3>${escapeHtml(p.nome)}</h3><p>${escapeHtml([p.sigla, p.cnes ? `CNES ${p.cnes}` : ''].filter(Boolean).join(' · ') || 'Sem sigla/CNES informado')}</p><div class="unit-meta"><span class="status-chip${p.ativo === false ? ' off' : ''}">${p.ativo === false ? 'Inativo' : 'Ativo'}</span><span class="mini-badge">${patients} pacientes</span><span class="mini-badge">${nurse ? `Enf. ${escapeHtml(nurse.nome || nurse.email || 'Responsável')}` : 'Sem enfermeira responsável'}</span></div></article>`;
+  }).join('') : '<div class="empty-state"><div class="empty-icon">+</div><h3>Nenhum posto cadastrado</h3><p>Cadastre a primeira unidade e depois vincule a enfermeira responsável.</p></div>';
 }
 
 function openPosto(posto = null) {
@@ -37,7 +56,7 @@ async function savePosto(event) {
     refreshPostoFilters();
     renderPostos();
     renderDashboard();
-    showToast(id ? 'Posto atualizado.' : 'Posto cadastrado.');
+    showToast(id ? 'Posto atualizado.' : 'Posto cadastrado. Agora vincule a enfermeira responsável.');
   } catch (error) {
     console.error(error);
     showToast(firebaseMessage(error), 'error');
@@ -46,7 +65,7 @@ async function savePosto(event) {
 
 function renderUsers() {
   if (state.profile?.role !== 'admin') return;
-  $('#usersTableBody').innerHTML = state.users.map((u) => `<tr data-user-id="${u.uid}"><td><div class="patient-name"><strong>${escapeHtml(u.nome || 'Sem nome')}</strong><span>${escapeHtml(u.email || '')}</span></div></td><td>${u.role === 'admin' ? 'Administrador geral' : 'Usuário do posto'}</td><td>${u.role === 'admin' ? 'Todos os postos' : escapeHtml(getPostoName(u.postoId))}</td><td><span class="status-chip${u.ativo === false ? ' off' : ''}">${u.ativo === false ? 'Inativo' : 'Ativo'}</span></td><td><div class="row-actions"><button class="icon-btn row-icon-btn" data-action="edit-user" title="Editar">✎</button></div></td></tr>`).join('');
+  $('#usersTableBody').innerHTML = state.users.map((u) => `<tr data-user-id="${u.uid}"><td><div class="patient-name"><strong>${escapeHtml(u.nome || 'Sem nome')}</strong><span>${escapeHtml(u.email || '')}</span></div></td><td>${roleLabel(u.role)}</td><td>${u.role === 'admin' ? 'Todos os postos' : escapeHtml(getPostoName(u.postoId))}</td><td><span class="status-chip${u.ativo === false ? ' off' : ''}">${u.ativo === false ? 'Inativo' : 'Ativo'}</span></td><td><div class="row-actions"><button class="icon-btn row-icon-btn" data-action="edit-user" title="Editar">✎</button></div></td></tr>`).join('');
 }
 
 function openUser(user = null) {
@@ -58,12 +77,16 @@ function openUser(user = null) {
   $('#newUserEmail').disabled = Boolean(user);
   $('#newUserPasswordField').classList.toggle('hidden', Boolean(user));
   $('#newUserPassword').required = !user;
+  const nurseOption = $('#newUserRole option[value="posto"]');
+  if (nurseOption) nurseOption.textContent = 'Enfermeira responsável';
   $('#newUserRole').value = user?.role || 'posto';
   fillPostoSelect($('#newUserPosto'));
   $('#newUserPosto').value = user?.postoId || '';
   $('#newUserAtivo').checked = user?.ativo !== false;
   $('#userModalTitle').textContent = user ? 'Editar usuário' : 'Novo usuário';
-  $('#userFormHint').textContent = user ? 'O e-mail e a senha do Firebase Authentication não são alterados por esta tela.' : 'A conta será criada no Firebase Authentication e vinculada ao perfil do sistema.';
+  $('#userFormHint').textContent = user
+    ? 'A enfermeira fica vinculada a um único posto. O e-mail e a senha do Firebase Authentication não são alterados por esta tela.'
+    : 'Cada posto pode ter uma enfermeira responsável ativa. Ela poderá cadastrar e acompanhar os pacientes somente da própria unidade.';
   syncUserRoleField();
   openModal('userModal');
 }
@@ -72,6 +95,8 @@ function syncUserRoleField() {
   const admin = $('#newUserRole').value === 'admin';
   $('#newUserPostoField').classList.toggle('hidden', admin);
   $('#newUserPosto').required = !admin;
+  const label = $('#newUserPostoField span');
+  if (label) label.textContent = admin ? 'Posto' : 'Posto de responsabilidade *';
 }
 
 async function saveUser(event) {
@@ -88,14 +113,23 @@ async function saveUser(event) {
   if (!nome || !role || (role === 'posto' && !postoId)) return showUserError('Preencha os campos obrigatórios.');
   if (uid === state.firebaseUser.uid && (role !== 'admin' || !ativo)) return showUserError('O administrador conectado não pode remover o próprio acesso administrativo nem desativar a própria conta.');
 
+  if (role === 'posto' && ativo) {
+    const conflict = nurseConflictForPosto(postoId, uid);
+    if (conflict) {
+      return showUserError(`O posto ${getPostoName(postoId)} já possui uma enfermeira responsável ativa: ${conflict.nome || conflict.email}. Edite ou desative esse vínculo antes de trocar a responsável.`);
+    }
+  }
+
+  const cargo = role === 'posto' ? 'enfermeira_responsavel' : 'administrador';
+
   if (uid) {
     try {
-      await updateDoc(doc(db, 'usuarios', uid), { nome, role, postoId, ativo, atualizadoEm: serverTimestamp() });
+      await updateDoc(doc(db, 'usuarios', uid), { nome, role, cargo, postoId, ativo, atualizadoEm: serverTimestamp() });
       closeModal('userModal');
       await loadUsers();
       renderUsers();
       renderPostos();
-      showToast('Usuário atualizado.');
+      showToast(role === 'posto' ? 'Enfermeira responsável atualizada.' : 'Usuário atualizado.');
     } catch (error) {
       showUserError(firebaseMessage(error));
     }
@@ -111,7 +145,7 @@ async function saveUser(event) {
     const secondaryAuth = getAuth(secondaryApp);
     credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
     await setDoc(doc(db, 'usuarios', credential.user.uid), {
-      nome, email, role, postoId, ativo,
+      nome, email, role, cargo, postoId, ativo,
       criadoEm: serverTimestamp(),
       atualizadoEm: serverTimestamp()
     });
@@ -119,7 +153,7 @@ async function saveUser(event) {
     await loadUsers();
     renderUsers();
     renderPostos();
-    showToast('Usuário criado com sucesso.');
+    showToast(role === 'posto' ? 'Enfermeira responsável criada e vinculada ao posto.' : 'Usuário criado com sucesso.');
   } catch (error) {
     console.error(error);
     if (credential?.user) {
