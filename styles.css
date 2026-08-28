@@ -1,2 +1,31 @@
 @import url("./styles-base.css");
 @import url("./styles-ui.css");
+
+.password-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.password-control input {
+  padding-right: 78px !important;
+}
+.password-toggle {
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-width: 62px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 7px;
+  color: #42615e;
+  background: #eef5f4;
+  font-size: 9px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.password-toggle:hover {
+  color: #0f766e;
+  background: #e1f1ee;
+}
