@@ -73,8 +73,6 @@ service cloud.firestore {
     }
 
     match /postos/{postoId} {
-      // O usuário do posto pode ler o documento da própria unidade mesmo se ela
-      // tiver sido desativada; isso permite que a interface informe o bloqueio.
       allow read: if activeUser()
         && (
           isAdmin()
@@ -84,6 +82,34 @@ service cloud.firestore {
       allow create, update: if isAdmin()
         && request.resource.data.nome is string
         && request.resource.data.ativo is bool;
+
+      allow delete: if false;
+    }
+
+    // Diretório mínimo da rede. Permite localizar um cidadão e sua unidade,
+    // sem liberar o prontuário clínico de outro posto.
+    match /pacientes_index/{indexId} {
+      allow read: if isAdmin() || isActivePostoUser();
+
+      allow create: if activeUser()
+        && request.resource.data.nome is string
+        && request.resource.data.postoId is string
+        && request.resource.data.dataNascimento is string
+        && request.resource.data.ativo is bool
+        && (isAdmin() || samePosto(request.resource.data.postoId));
+
+      allow update: if activeUser()
+        && request.resource.data.nome is string
+        && request.resource.data.postoId is string
+        && request.resource.data.dataNascimento is string
+        && request.resource.data.ativo is bool
+        && (
+          isAdmin()
+          || (
+            samePosto(resource.data.postoId)
+            && request.resource.data.postoId == resource.data.postoId
+          )
+        );
 
       allow delete: if false;
     }
