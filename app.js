@@ -75,6 +75,7 @@ for (const src of [
   './app-opt-write.js',
   './app-opt-dashboard.js',
   './app-opt-import.js',
+  './app-idoso.js',
   './app-main.js'
 ]) {
   await loadClassic(src);
