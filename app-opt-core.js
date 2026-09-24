@@ -116,7 +116,7 @@ function optConsultaKeys(patient) {
 
 function optIndexPayload(patient, source = null) {
   const postoId = patient.postoId || source?.postoId || '';
-  const postoNome = getPostoName(postoId) || source?.postoNome || '';
+  const postoNome = state.postos.find((p) => p.id === postoId)?.nome || patient.postoNome || source?.postoNome || '';
   const cpfDigits = String(patient.cpfNormalizado || patient.cpf || source?.cpfNormalizado || source?.cpf || '').replace(/\D/g, '');
   const cnsDigits = String(patient.cnsNormalizado || patient.cns || source?.cnsNormalizado || source?.cns || '').replace(/\D/g, '');
   const nome = patient.nome || source?.nome || '';
@@ -293,7 +293,6 @@ renderPatients = function optimizedRenderPatients() {
   state.opt.patientReloadTimer = setTimeout(() => optQueryPatientPage(true), 280);
 };
 
-// Nunca carrega a coleção inteira no login.
 loadPatients = async function optimizedLoadPatients() {
   if (!state.opt.patientRequested && state.currentView !== 'pacientes') {
     state.patients = [];
@@ -375,3 +374,17 @@ function optUpdateLocalPatientSummary(summary) {
   if (state.patients.length > OPT_PAGE_SIZE && !state.opt.patientHasMore) state.patients.length = OPT_PAGE_SIZE;
 }
 
+networkAction = function optimizedNetworkAction(event) {
+  const button = event.target.closest('[data-net]');
+  if (!button) return;
+  const record = state.networkResults[Number(button.dataset.i)];
+  if (!record) return;
+  if (button.dataset.net === 'open') {
+    closeModal('networkSearchModal');
+    openPatient({ ...record, id: record.pacienteId || record.id, _summaryOnly: true });
+    return;
+  }
+  closeModal('networkSearchModal');
+  startNetworkPatient(record);
+};
+if ($('#networkSearchResults')) $('#networkSearchResults').onclick = networkAction;
