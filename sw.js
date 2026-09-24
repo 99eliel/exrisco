@@ -10,6 +10,10 @@ const APP_SHELL = [
   './app-patient.js',
   './app-admin.js',
   './app-network.js',
+  './app-opt-core.js',
+  './app-opt-write.js',
+  './app-opt-dashboard.js',
+  './app-opt-import.js',
   './app-main.js',
   './manifest.webmanifest',
   './icon.svg'
@@ -56,9 +60,7 @@ self.addEventListener('fetch', (event) => {
     caches.match(event.request).then((cached) => {
       const network = fetch(event.request)
         .then((response) => {
-          if (response.ok) {
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
-          }
+          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
           return response;
         })
         .catch(() => cached);

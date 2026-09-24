@@ -24,7 +24,10 @@ import {
   orderBy,
   startAt,
   endAt,
+  startAfter,
   limit,
+  getCountFromServer,
+  increment,
   serverTimestamp
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-firestore.js';
 
@@ -49,7 +52,8 @@ window.EXRiscoFirebase = {
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
   createUserWithEmailAndPassword, deleteUser,
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, writeBatch,
-  query, where, orderBy, startAt, endAt, limit, serverTimestamp
+  query, where, orderBy, startAt, endAt, startAfter, limit,
+  getCountFromServer, increment, serverTimestamp
 };
 
 function loadClassic(src) {
@@ -62,6 +66,16 @@ function loadClassic(src) {
   });
 }
 
-for (const src of ['./app-config.js', './app-patient.js', './app-admin.js', './app-network.js', './app-main.js']) {
+for (const src of [
+  './app-config.js',
+  './app-patient.js',
+  './app-admin.js',
+  './app-network.js',
+  './app-opt-core.js',
+  './app-opt-write.js',
+  './app-opt-dashboard.js',
+  './app-opt-import.js',
+  './app-main.js'
+]) {
   await loadClassic(src);
 }

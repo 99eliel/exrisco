@@ -9,14 +9,6 @@ service cloud.firestore {
       return /databases/$(database)/documents/usuarios/$(request.auth.uid);
     }
 
-    function postoPath(postoId) {
-      return /databases/$(database)/documents/postos/$(postoId);
-    }
-
-    function patientPath(patientId) {
-      return /databases/$(database)/documents/pacientes/$(patientId);
-    }
-
     function hasProfile() {
       return signedIn() && exists(userPath());
     }
@@ -39,14 +31,8 @@ service cloud.firestore {
         && profile().postoId is string;
     }
 
-    function isActivePostoUser() {
-      return isPostoProfile()
-        && exists(postoPath(profile().postoId))
-        && get(postoPath(profile().postoId)).data.ativo == true;
-    }
-
     function samePosto(postoId) {
-      return isActivePostoUser() && profile().postoId == postoId;
+      return isPostoProfile() && profile().postoId == postoId;
     }
 
     match /usuarios/{uid} {
@@ -74,28 +60,36 @@ service cloud.firestore {
 
     match /postos/{postoId} {
       allow read: if activeUser()
-        && (
-          isAdmin()
-          || (isPostoProfile() && profile().postoId == postoId)
-        );
+        && (isAdmin() || samePosto(postoId));
 
-      allow create, update: if isAdmin()
+      allow create: if isAdmin()
         && request.resource.data.nome is string
         && request.resource.data.ativo is bool;
+
+      allow update: if (
+          isAdmin()
+          && request.resource.data.nome is string
+          && request.resource.data.ativo is bool
+        ) || (
+          samePosto(postoId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['metricas', 'atualizadoEm'])
+        );
 
       allow delete: if false;
     }
 
-    // Diretório mínimo da rede. Permite localizar um cidadão e sua unidade,
-    // sem liberar o prontuário clínico de outro posto.
+    // Diretório mínimo da rede: somente identificação, unidade e resumo operacional.
+    // Todas as pessoas autenticadas podem localizar um paciente, mas o prontuário
+    // clínico continua restrito à própria unidade.
     match /pacientes_index/{indexId} {
-      allow read: if isAdmin() || isActivePostoUser();
+      allow read: if activeUser();
 
       allow create: if activeUser()
         && request.resource.data.nome is string
         && request.resource.data.postoId is string
         && request.resource.data.dataNascimento is string
         && request.resource.data.ativo is bool
+        && request.resource.data.pacienteId is string
         && (isAdmin() || samePosto(request.resource.data.postoId));
 
       allow update: if activeUser()
@@ -103,6 +97,7 @@ service cloud.firestore {
         && request.resource.data.postoId is string
         && request.resource.data.dataNascimento is string
         && request.resource.data.ativo is bool
+        && request.resource.data.pacienteId is string
         && (
           isAdmin()
           || (
@@ -147,14 +142,14 @@ service cloud.firestore {
       allow read: if activeUser()
         && (isAdmin() || samePosto(resource.data.postoId));
 
+      // O histórico é gravado no mesmo batch do prontuário. Não usamos get()/exists()
+      // em paciente aqui para evitar uma leitura dependente extra das Security Rules.
       allow create: if activeUser()
         && request.resource.data.patientId is string
         && request.resource.data.postoId is string
         && request.resource.data.acao is string
         && request.resource.data.resumo is string
         && request.resource.data.userId == request.auth.uid
-        && exists(patientPath(request.resource.data.patientId))
-        && get(patientPath(request.resource.data.patientId)).data.postoId == request.resource.data.postoId
         && (isAdmin() || samePosto(request.resource.data.postoId));
 
       allow update, delete: if false;

@@ -22,7 +22,8 @@ jobs:
           set -euo pipefail
           required=(
             index.html styles.css styles-base.css styles-ui.css
-            app.js app-config.js app-patient.js app-admin.js app-main.js
+            app.js app-config.js app-patient.js app-admin.js app-network.js
+            app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-main.js
             manifest.webmanifest sw.js icon.svg firebase.json
             firestore.rules firestore-rules.txt
           )
@@ -34,13 +35,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node --check app-config.js
-          node --check app-patient.js
-          node --check app-admin.js
-          node --check app-main.js
-          node --check sw.js
+          for file in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-main.js sw.js; do
+            node --check "$file"
+          done
           cp app.js /tmp/exrisco-app.mjs
           node --check /tmp/exrisco-app.mjs
+
+      - name: Guard optimized read path
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "const OPT_PAGE_SIZE = 30" app-opt-core.js
+          grep -Fq "loadPatients = async function optimizedLoadPatients" app-opt-core.js
+          grep -Fq "loadUsers = async function optimizedLoadUsers" app-opt-core.js
+          grep -Fq "getCountFromServer" app.js
+          python3 - <<'PY'
+          app = open('app.js', encoding='utf-8').read()
+          opt_files = [
+              "'./app-opt-core.js'",
+              "'./app-opt-write.js'",
+              "'./app-opt-dashboard.js'",
+              "'./app-opt-import.js'",
+          ]
+          main = app.index("'./app-main.js'")
+          assert all(app.index(name) < main for name in opt_files), 'optimization layers must load before app-main.js'
+          PY
 
       - name: Check Firestore rule copies
         run: cmp --silent firestore.rules firestore-rules.txt
@@ -55,9 +74,9 @@ jobs:
           for asset in styles-base.css styles-ui.css; do
             grep -Fq "./$asset" styles.css || { echo "styles.css does not reference $asset"; exit 1; }
           done
-          for asset in app-config.js app-patient.js app-admin.js app-main.js; do
+          for asset in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-main.js; do
             grep -Fq "./$asset" app.js || { echo "app.js does not load $asset"; exit 1; }
           done
-          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-admin.js app-main.js manifest.webmanifest icon.svg; do
+          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-main.js manifest.webmanifest icon.svg; do
             grep -Fq "./$asset" sw.js || { echo "sw.js cache shell does not include $asset"; exit 1; }
           done
