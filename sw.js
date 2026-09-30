@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exrisco-static-v1.4.0';
+const CACHE_NAME = 'exrisco-static-v1.4.1';
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,6 +8,7 @@ const APP_SHELL = [
   './app.js',
   './app-config.js',
   './app-patient.js',
+  './app-role-ui.js',
   './app-admin.js',
   './app-network.js',
   './app-opt-core.js',
@@ -42,8 +43,6 @@ self.addEventListener('activate', (event) => {
 });
 
 async function responseFingerprint(response) {
-  const etag = response.headers.get('etag');
-  if (etag) return `etag:${etag}`;
   const buffer = await response.clone().arrayBuffer();
   const digest = await crypto.subtle.digest('SHA-256', buffer);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
