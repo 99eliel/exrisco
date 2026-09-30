@@ -77,7 +77,8 @@ for (const src of [
   './app-opt-import.js',
   './app-idoso.js',
   './app-main.js',
-  './app-access.js'
+  './app-access.js',
+  './app-update.js'
 ]) {
   await loadClassic(src);
 }
