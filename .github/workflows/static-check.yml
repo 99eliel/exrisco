@@ -24,7 +24,7 @@ jobs:
             index.html styles.css styles-base.css styles-ui.css
             app.js app-config.js app-patient.js app-admin.js app-network.js
             app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js
-            app-idoso.js app-main.js app-access.js
+            app-idoso.js app-main.js app-access.js app-update.js
             manifest.webmanifest sw.js icon.svg firebase.json
             firestore.rules firestore-rules.txt
           )
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js sw.js; do
+          for file in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js sw.js; do
             node --check "$file"
           done
           cp app.js /tmp/exrisco-app.mjs
@@ -61,7 +61,18 @@ jobs:
           main = app.index("'./app-main.js'")
           assert all(app.index(name) < main for name in opt_files), 'optimization layers must load before app-main.js'
           assert app.index("'./app-access.js'") > main, 'access UI must load after app-main.js'
+          assert app.index("'./app-update.js'") > app.index("'./app-access.js'"), 'auto update must load last'
           PY
+
+      - name: Guard automatic PWA update
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "CHECK_APP_SHELL" app-update.js
+          grep -Fq "EXRISCO_UPDATE_READY" app-update.js
+          grep -Fq "CHECK_APP_SHELL" sw.js
+          grep -Fq "EXRISCO_UPDATE_READY" sw.js
+          grep -Fq "cache: 'no-store'" sw.js
 
       - name: Check Firestore rule copies
         run: cmp --silent firestore.rules firestore-rules.txt
@@ -76,9 +87,9 @@ jobs:
           for asset in styles-base.css styles-ui.css; do
             grep -Fq "./$asset" styles.css || { echo "styles.css does not reference $asset"; exit 1; }
           done
-          for asset in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js; do
+          for asset in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js; do
             grep -Fq "./$asset" app.js || { echo "app.js does not load $asset"; exit 1; }
           done
-          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js manifest.webmanifest icon.svg; do
+          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js manifest.webmanifest icon.svg; do
             grep -Fq "./$asset" sw.js || { echo "sw.js cache shell does not include $asset"; exit 1; }
           done
