@@ -1,5 +1,6 @@
 @import url("./styles-base.css");
 @import url("./styles-ui.css");
+@import url("./styles-followup.css");
 
 .password-control {
   position: relative;
@@ -28,21 +29,4 @@
 .password-toggle:hover {
   color: #0f766e;
   background: #e1f1ee;
-}
-
-.nurse-follow-guide {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 12px;
-  padding: 12px 14px;
-  border: 1px solid #cfe6e3;
-  border-radius: 12px;
-  background: #f2faf9;
-  color: #365a56;
-  font-size: 12px;
-  line-height: 1.45;
-}
-.nurse-follow-guide strong {
-  color: #0f766e;
 }
