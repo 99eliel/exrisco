@@ -90,21 +90,50 @@
 
   function enhanceNurseRows() {
     ensureNurseGuide();
-    if (state.profile?.role !== 'posto') return;
+    const nurse = state.profile?.role === 'posto';
     document.querySelectorAll('#patientsTableBody [data-action="edit"]').forEach((button) => {
-      button.className = 'btn primary small';
-      button.textContent = 'Acompanhar';
-      button.title = 'Abrir acompanhamento do paciente';
-      button.setAttribute('aria-label', 'Acompanhar paciente');
+      if (nurse) {
+        button.className = 'btn primary small';
+        button.textContent = 'Acompanhar';
+        button.title = 'Abrir acompanhamento do paciente';
+        button.setAttribute('aria-label', 'Acompanhar paciente');
+      } else {
+        button.className = 'icon-btn row-icon-btn';
+        button.textContent = '✎';
+        button.title = 'Editar';
+        button.setAttribute('aria-label', 'Editar paciente');
+      }
     });
   }
 
+  // A camada otimizada renderiza a tabela por uma função interna que foi criada
+  // antes deste módulo. Observar o tbody garante que qualquer paginação, filtro
+  // ou rerender também receba o botão correto para a enfermeira.
+  const patientBody = document.getElementById('patientsTableBody');
+  if (patientBody) {
+    new MutationObserver(() => enhanceNurseRows()).observe(patientBody, {
+      childList: true,
+      subtree: true
+    });
+  }
+
+  // Mantém compatibilidade com caminhos que chamam renderPatients diretamente.
   const baseRenderPatients = renderPatients;
   renderPatients = function accessAwareRenderPatients() {
     const result = baseRenderPatients();
     enhanceNurseRows();
     return result;
   };
+
+  // E também cobre explicitamente o renderizador da camada otimizada, quando presente.
+  if (typeof optRenderPatientListNow === 'function') {
+    const baseOptimizedRender = optRenderPatientListNow;
+    optRenderPatientListNow = function accessAwareOptimizedRender() {
+      const result = baseOptimizedRender();
+      enhanceNurseRows();
+      return result;
+    };
+  }
 
   const baseOpenPatient = openPatient;
   openPatient = async function accessAwareOpenPatient(patient = null) {
@@ -125,6 +154,7 @@
   };
 
   setAccessLabels();
+  enhanceNurseRows();
 
   // O formulário já possui Mostrar/Ocultar senha via app-main.js.
   const passwordField = document.getElementById('newUserPasswordField');
