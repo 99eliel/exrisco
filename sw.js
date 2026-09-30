@@ -1,10 +1,11 @@
-const CACHE_NAME = 'exrisco-static-v1.4.1';
+const CACHE_NAME = 'exrisco-static-v1.5.0';
 const APP_SHELL = [
   './',
   './index.html',
   './styles.css',
   './styles-base.css',
   './styles-ui.css',
+  './styles-followup.css',
   './app.js',
   './app-config.js',
   './app-patient.js',
