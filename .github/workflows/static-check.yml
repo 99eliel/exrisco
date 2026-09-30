@@ -22,7 +22,7 @@ jobs:
           set -euo pipefail
           required=(
             index.html styles.css styles-base.css styles-ui.css
-            app.js app-config.js app-patient.js app-admin.js app-network.js
+            app.js app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js
             app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js
             app-idoso.js app-main.js app-access.js app-update.js
             manifest.webmanifest sw.js icon.svg firebase.json
@@ -36,7 +36,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js sw.js; do
+          for file in app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js sw.js; do
             node --check "$file"
           done
           cp app.js /tmp/exrisco-app.mjs
@@ -52,17 +52,27 @@ jobs:
           grep -Fq "getCountFromServer" app.js
           python3 - <<'PY'
           app = open('app.js', encoding='utf-8').read()
-          opt_files = [
-              "'./app-opt-core.js'",
-              "'./app-opt-write.js'",
-              "'./app-opt-dashboard.js'",
-              "'./app-opt-import.js'",
-          ]
+          role_ui = app.index("'./app-role-ui.js'")
+          opt_core = app.index("'./app-opt-core.js'")
           main = app.index("'./app-main.js'")
-          assert all(app.index(name) < main for name in opt_files), 'optimization layers must load before app-main.js'
-          assert app.index("'./app-access.js'") > main, 'access UI must load after app-main.js'
-          assert app.index("'./app-update.js'") > app.index("'./app-access.js'"), 'auto update must load last'
+          access = app.index("'./app-access.js'")
+          updater = app.index("'./app-update.js'")
+          assert role_ui < opt_core, 'role-aware patient UI must load before optimization layers'
+          assert opt_core < main, 'optimization layers must load before app-main.js'
+          assert access > main, 'access UI must load after app-main.js'
+          assert updater > access, 'automatic updater must load last'
           PY
+
+      - name: Guard patient UI architecture
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "roleAwareRenderPatients" app-role-ui.js
+          grep -Fq "roleAwareOpenPatient" app-role-ui.js
+          if grep -Fq "MutationObserver" app-role-ui.js app-access.js; then
+            echo "MutationObserver is not allowed in patient/access UI modules"
+            exit 1
+          fi
 
       - name: Guard automatic PWA update
         shell: bash
@@ -87,9 +97,9 @@ jobs:
           for asset in styles-base.css styles-ui.css; do
             grep -Fq "./$asset" styles.css || { echo "styles.css does not reference $asset"; exit 1; }
           done
-          for asset in app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js; do
+          for asset in app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js; do
             grep -Fq "./$asset" app.js || { echo "app.js does not load $asset"; exit 1; }
           done
-          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js manifest.webmanifest icon.svg; do
+          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js manifest.webmanifest icon.svg; do
             grep -Fq "./$asset" sw.js || { echo "sw.js cache shell does not include $asset"; exit 1; }
           done
