@@ -23,8 +23,7 @@
         adminButton.className = 'btn ghost';
         adminButton.textContent = '+ Cadastrar administrador';
         adminButton.addEventListener('click', openAdminAccessForm);
-        if (nurseButton) actions.appendChild(adminButton);
-        else actions.appendChild(adminButton);
+        actions.appendChild(adminButton);
       }
     }
 
@@ -69,6 +68,60 @@
       if (title) title.textContent = 'Editar enfermeira responsável';
       if (hint) hint.textContent = 'A enfermeira fica vinculada a um único posto. E-mail e senha do Firebase não são alterados nesta tela.';
     }
+  };
+
+  function ensureNurseGuide() {
+    const view = document.getElementById('view-pacientes');
+    const toolbar = view?.querySelector('.toolbar');
+    if (!view || !toolbar) return;
+    let guide = document.getElementById('nurseFollowGuide');
+    if (state.profile?.role !== 'posto') {
+      guide?.remove();
+      return;
+    }
+    if (!guide) {
+      guide = document.createElement('div');
+      guide.id = 'nurseFollowGuide';
+      guide.style.cssText = 'margin-bottom:12px;padding:12px 14px;border:1px solid #cfe6e3;border-radius:12px;background:#f2faf9;color:#365a56;font-size:12px;line-height:1.45';
+      guide.innerHTML = '<strong style="display:block;color:#0f766e;margin-bottom:3px">Acompanhamento da sua unidade</strong>Localize o paciente abaixo e clique em <b>Acompanhar</b>. O prontuário abrirá com os grupos já vinculados para você registrar consulta, exames, risco, medicações, retorno e observações.';
+      toolbar.parentNode.insertBefore(guide, toolbar);
+    }
+  }
+
+  function enhanceNurseRows() {
+    ensureNurseGuide();
+    if (state.profile?.role !== 'posto') return;
+    document.querySelectorAll('#patientsTableBody [data-action="edit"]').forEach((button) => {
+      button.className = 'btn primary small';
+      button.textContent = 'Acompanhar';
+      button.title = 'Abrir acompanhamento do paciente';
+      button.setAttribute('aria-label', 'Acompanhar paciente');
+    });
+  }
+
+  const baseRenderPatients = renderPatients;
+  renderPatients = function accessAwareRenderPatients() {
+    const result = baseRenderPatients();
+    enhanceNurseRows();
+    return result;
+  };
+
+  const baseOpenPatient = openPatient;
+  openPatient = async function accessAwareOpenPatient(patient = null) {
+    const result = await baseOpenPatient(patient);
+    const isNurse = state.profile?.role === 'posto';
+    const title = document.getElementById('patientModalTitle');
+    const save = document.getElementById('savePatientBtn');
+    if (isNurse && patient) {
+      if (title) title.textContent = `Acompanhamento — ${patient.nome || 'Paciente'}`;
+      if (save) save.textContent = 'Salvar acompanhamento';
+    } else if (isNurse && !patient) {
+      if (title) title.textContent = 'Cadastrar novo paciente';
+      if (save) save.textContent = 'Cadastrar paciente';
+    } else if (save) {
+      save.textContent = 'Salvar paciente';
+    }
+    return result;
   };
 
   setAccessLabels();
