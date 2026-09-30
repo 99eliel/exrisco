@@ -69,6 +69,7 @@ function loadClassic(src) {
 for (const src of [
   './app-config.js',
   './app-patient.js',
+  './app-role-ui.js',
   './app-admin.js',
   './app-network.js',
   './app-opt-core.js',
