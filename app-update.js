@@ -1,6 +1,5 @@
-// EXRisco — atualização automática do PWA sem depender de Ctrl+F5.
-// Verifica o service worker e os arquivos do app ao abrir, ao voltar para a aba,
-// ao reconectar e periodicamente. Nunca toca no Firestore.
+// EXRisco — atualização automática do PWA.
+// Responsável apenas por detectar e aplicar novas versões com segurança.
 (function configureAutomaticUpdates() {
   if (!('serviceWorker' in navigator)) return;
 
@@ -8,31 +7,47 @@
   const MIN_CHECK_GAP_MS = 60 * 1000;
   let registration = null;
   let lastCheckAt = 0;
-  let updatePending = false;
+  let shellUpdatePending = false;
+  let waitingWorker = null;
   let retryTimer = null;
 
   function hasOpenEditor() {
     return Boolean(document.querySelector('.modal:not(.hidden)'));
   }
 
-  function reloadWhenSafe() {
+  function stopRetryTimer() {
+    if (!retryTimer) return;
+    clearInterval(retryTimer);
+    retryTimer = null;
+  }
+
+  function applyPendingUpdateWhenSafe() {
     if (serviceWorkerReloading) return;
+
     if (hasOpenEditor()) {
-      updatePending = true;
       if (!retryTimer) {
         retryTimer = setInterval(() => {
-          if (!updatePending || hasOpenEditor()) return;
-          clearInterval(retryTimer);
-          retryTimer = null;
-          reloadWhenSafe();
-        }, 5000);
+          if (!hasOpenEditor()) applyPendingUpdateWhenSafe();
+        }, 3000);
       }
       return;
     }
 
-    updatePending = false;
-    serviceWorkerReloading = true;
-    window.location.reload();
+    stopRetryTimer();
+
+    if (waitingWorker) {
+      const worker = waitingWorker;
+      waitingWorker = null;
+      shellUpdatePending = false;
+      worker.postMessage({ type: 'SKIP_WAITING' });
+      return;
+    }
+
+    if (shellUpdatePending) {
+      shellUpdatePending = false;
+      serviceWorkerReloading = true;
+      window.location.reload();
+    }
   }
 
   async function requestUpdateCheck(force = false) {
@@ -46,7 +61,9 @@
       await registration.update();
 
       if (registration.waiting) {
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        waitingWorker = registration.waiting;
+        applyPendingUpdateWhenSafe();
+        return;
       }
 
       const controller = navigator.serviceWorker.controller;
@@ -58,11 +75,8 @@
 
   navigator.serviceWorker.addEventListener('message', (event) => {
     if (event.data?.type !== 'EXRISCO_UPDATE_READY') return;
-    reloadWhenSafe();
-  });
-
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    reloadWhenSafe();
+    shellUpdatePending = true;
+    applyPendingUpdateWhenSafe();
   });
 
   window.addEventListener('load', () => {
@@ -77,9 +91,9 @@
   });
 
   document.addEventListener('click', (event) => {
-    if (!updatePending) return;
+    if (!shellUpdatePending && !waitingWorker) return;
     if (event.target.closest('[data-close-modal], #confirmCancel, #confirmOk')) {
-      setTimeout(reloadWhenSafe, 250);
+      setTimeout(applyPendingUpdateWhenSafe, 300);
     }
   });
 })();
