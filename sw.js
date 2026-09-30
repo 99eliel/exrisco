@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exrisco-static-v1.3.4';
+const CACHE_NAME = 'exrisco-static-v1.4.0';
 const APP_SHELL = [
   './',
   './index.html',
@@ -17,9 +17,12 @@ const APP_SHELL = [
   './app-idoso.js',
   './app-main.js',
   './app-access.js',
+  './app-update.js',
   './manifest.webmanifest',
   './icon.svg'
 ];
+
+let shellRefreshPromise = null;
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
@@ -38,6 +41,61 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+async function responseFingerprint(response) {
+  const etag = response.headers.get('etag');
+  if (etag) return `etag:${etag}`;
+  const buffer = await response.clone().arrayBuffer();
+  const digest = await crypto.subtle.digest('SHA-256', buffer);
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function refreshAppShell() {
+  if (shellRefreshPromise) return shellRefreshPromise;
+
+  shellRefreshPromise = (async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const assets = [...new Set(APP_SHELL.filter((asset) => asset !== './'))];
+    let changed = false;
+
+    for (const asset of assets) {
+      try {
+        const fresh = await fetch(asset, { cache: 'no-store' });
+        if (!fresh.ok) continue;
+
+        const cached = await cache.match(asset);
+        const freshFingerprint = await responseFingerprint(fresh);
+        const cachedFingerprint = cached ? await responseFingerprint(cached) : '';
+
+        if (freshFingerprint !== cachedFingerprint) {
+          changed = true;
+          await cache.put(asset, fresh.clone());
+        }
+      } catch (error) {
+        console.warn(`Falha ao verificar ${asset}`, error);
+      }
+    }
+
+    if (changed) {
+      const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const client of clients) client.postMessage({ type: 'EXRISCO_UPDATE_READY' });
+    }
+  })().finally(() => {
+    shellRefreshPromise = null;
+  });
+
+  return shellRefreshPromise;
+}
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+  if (event.data?.type === 'CHECK_APP_SHELL') {
+    event.waitUntil(refreshAppShell());
+  }
+});
+
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
@@ -45,7 +103,7 @@ self.addEventListener('fetch', (event) => {
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-store' })
         .then((response) => {
           if (response.ok) {
             const copy = response.clone();
