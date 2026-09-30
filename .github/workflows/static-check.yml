@@ -21,7 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           required=(
-            index.html styles.css styles-base.css styles-ui.css
+            index.html styles.css styles-base.css styles-ui.css styles-followup.css
             app.js app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js
             app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js
             app-idoso.js app-main.js app-access.js app-update.js
@@ -69,6 +69,8 @@ jobs:
           set -euo pipefail
           grep -Fq "roleAwareRenderPatients" app-role-ui.js
           grep -Fq "roleAwareOpenPatient" app-role-ui.js
+          grep -Fq "rebuildFollowupNavigator" app-role-ui.js
+          grep -Fq "followup-current" styles-followup.css
           if grep -Fq "MutationObserver" app-role-ui.js app-access.js; then
             echo "MutationObserver is not allowed in patient/access UI modules"
             exit 1
@@ -94,12 +96,12 @@ jobs:
           for asset in styles.css app.js manifest.webmanifest icon.svg; do
             grep -Fq "./$asset" index.html || { echo "index.html does not reference $asset"; exit 1; }
           done
-          for asset in styles-base.css styles-ui.css; do
+          for asset in styles-base.css styles-ui.css styles-followup.css; do
             grep -Fq "./$asset" styles.css || { echo "styles.css does not reference $asset"; exit 1; }
           done
           for asset in app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js; do
             grep -Fq "./$asset" app.js || { echo "app.js does not load $asset"; exit 1; }
           done
-          for asset in index.html styles.css styles-base.css styles-ui.css app.js app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js manifest.webmanifest icon.svg; do
+          for asset in index.html styles.css styles-base.css styles-ui.css styles-followup.css app.js app-config.js app-patient.js app-role-ui.js app-admin.js app-network.js app-opt-core.js app-opt-write.js app-opt-dashboard.js app-opt-import.js app-idoso.js app-main.js app-access.js app-update.js manifest.webmanifest icon.svg; do
             grep -Fq "./$asset" sw.js || { echo "sw.js cache shell does not include $asset"; exit 1; }
           done
