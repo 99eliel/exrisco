@@ -1,6 +1,6 @@
 const {
   firebaseConfig, auth, db,
-  initializeApp, deleteApp, getAuth,
+  initializeApp, deleteApp, getAuth, getFirestore,
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
   createUserWithEmailAndPassword, deleteUser,
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc,
@@ -8,7 +8,7 @@ const {
 } = window.EXRiscoFirebase;
 
 const CALCULATOR_URL = 'https://calculadora-risco.saude.go.gov.br/';
-const VERSION = '1.0.0';
+const VERSION = '1.5.1';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
