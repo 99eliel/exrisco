@@ -35,8 +35,8 @@ function configureNurseUi() {
   if (userView) {
     const title = userView.querySelector('.section-actions h2');
     const description = userView.querySelector('.section-actions .muted');
-    if (title) title.textContent = 'Enfermeiras responsáveis';
-    if (description) description.textContent = 'Cadastre a enfermeira responsável de cada posto e gerencie o acesso da unidade.';
+    if (title) title.textContent = 'Enfermeiras dos postos';
+    if (description) description.textContent = 'Cadastre uma ou mais enfermeiras por posto e gerencie os acessos da unidade.';
   }
 
   const addUserBtn = $('#addUserBtn');
@@ -47,7 +47,7 @@ function configureNurseUi() {
   if (headers[1]) headers[1].textContent = 'Tipo de acesso';
 
   const nurseOption = $('#newUserRole option[value="posto"]');
-  if (nurseOption) nurseOption.textContent = 'Enfermeira responsável';
+  if (nurseOption) nurseOption.textContent = 'Enfermeira do posto';
 
   const topbar = document.querySelector('.topbar-actions');
   if (topbar && !$('#quickAddNurseBtn')) {
@@ -194,9 +194,17 @@ async function handleAuthState(user) {
     showApp();
   } catch (error) {
     console.error(error);
-    const customMessage = error?.code === 'exrisco/unit-inactive' || error?.code === 'exrisco/unit-not-found'
-      ? error.message
-      : `Não foi possível carregar o sistema: ${firebaseMessage(error)}`;
+    let customMessage;
+    if (error?.code === 'exrisco/unit-inactive' || error?.code === 'exrisco/unit-not-found') {
+      customMessage = error.message;
+    } else if (
+      state.profile?.role === 'posto'
+      && (error?.code === 'permission-denied' || error?.code === 'firestore/permission-denied')
+    ) {
+      customMessage = 'A conta da enfermeira foi reconhecida, mas as regras publicadas do Firestore ainda não autorizaram o acesso ao posto. O administrador deve publicar o firestore-rules.txt atual do EXRisco.';
+    } else {
+      customMessage = `Não foi possível carregar o sistema: ${firebaseMessage(error)}`;
+    }
     await signOutWithMessage(customMessage);
   }
 }
@@ -305,8 +313,8 @@ function openNurseForm() {
   openUser();
   $('#newUserRole').value = 'posto';
   syncUserRoleField();
-  $('#userModalTitle').textContent = 'Cadastrar enfermeira responsável';
-  $('#userFormHint').textContent = 'Crie o acesso da enfermeira e vincule-a ao posto de responsabilidade. Ela poderá cadastrar e acompanhar pacientes somente daquela unidade.';
+  $('#userModalTitle').textContent = 'Cadastrar enfermeira';
+  $('#userFormHint').textContent = 'Crie o acesso da enfermeira e vincule-a ao posto onde trabalha. Um mesmo posto pode ter várias enfermeiras, todas com acesso aos pacientes da própria unidade.';
 }
 
 function bindAdminEvents() {
