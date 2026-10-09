@@ -76,6 +76,18 @@ jobs:
             exit 1
           fi
 
+      - name: Guard multi-nurse access model
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "function activeNursesForPosto" app-admin.js
+          grep -Fq "getFirestore(secondaryApp)" app-admin.js
+          grep -Fq "pacientes_index" app-admin.js
+          if grep -Fq "nurseConflictForPosto" app-admin.js; then
+            echo "Single-nurse-per-post restriction must not return"
+            exit 1
+          fi
+
       - name: Guard automatic PWA update
         shell: bash
         run: |
