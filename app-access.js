@@ -10,7 +10,7 @@
       const title = userView.querySelector('.section-actions h2');
       const description = userView.querySelector('.section-actions .muted');
       if (title) title.textContent = 'Usuários e acessos';
-      if (description) description.textContent = 'Cadastre enfermeiras vinculadas aos postos e administradores com acesso geral ao EXRisco.';
+      if (description) description.textContent = 'Cadastre uma ou mais enfermeiras em cada posto e administradores com acesso geral ao EXRisco.';
 
       const actions = userView.querySelector('.section-actions');
       const nurseButton = document.getElementById('addUserBtn');
@@ -35,7 +35,7 @@
     if (roleSelect) {
       const nurseOption = roleSelect.querySelector('option[value="posto"]');
       const adminOption = roleSelect.querySelector('option[value="admin"]');
-      if (nurseOption) nurseOption.textContent = 'Enfermeira responsável pelo posto';
+      if (nurseOption) nurseOption.textContent = 'Enfermeira do posto';
       if (adminOption) adminOption.textContent = 'Administrador geral';
     }
   }
@@ -67,8 +67,8 @@
       if (title) title.textContent = 'Editar administrador';
       if (hint) hint.textContent = 'Administrador geral: acesso a todos os postos, pacientes e gestão de usuários. E-mail e senha do Firebase não são alterados nesta tela.';
     } else {
-      if (title) title.textContent = 'Editar enfermeira responsável';
-      if (hint) hint.textContent = 'A enfermeira fica vinculada a um único posto. E-mail e senha do Firebase não são alterados nesta tela.';
+      if (title) title.textContent = 'Editar enfermeira';
+      if (hint) hint.textContent = 'A enfermeira fica vinculada a um posto. Um mesmo posto pode ter várias enfermeiras ativas. E-mail e senha do Firebase não são alterados nesta tela.';
     }
   };
 
