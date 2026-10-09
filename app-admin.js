@@ -1,19 +1,14 @@
-function responsibleNurseForPosto(postoId) {
-  return state.users.find((user) => user.role === 'posto' && user.postoId === postoId && user.ativo !== false) || null;
-}
-
-function nurseConflictForPosto(postoId, editingUid = '') {
-  return state.users.find((user) => (
-    user.uid !== editingUid
-    && user.role === 'posto'
+function activeNursesForPosto(postoId) {
+  return state.users.filter((user) => (
+    user.role === 'posto'
     && user.postoId === postoId
     && user.ativo !== false
-  )) || null;
+  ));
 }
 
 function roleLabel(role) {
   if (role === 'admin') return 'Administrador geral';
-  if (role === 'posto') return 'Enfermeira responsável';
+  if (role === 'posto') return 'Enfermeira do posto';
   return 'Perfil não identificado';
 }
 
@@ -21,8 +16,11 @@ function renderPostos() {
   if (state.profile?.role !== 'admin') return;
   $('#postosGrid').innerHTML = state.postos.length ? state.postos.map((p) => {
     const patients = state.patients.filter((patient) => patient.postoId === p.id && patient.ativo !== false).length;
-    const nurse = responsibleNurseForPosto(p.id);
-    return `<article class="unit-card" data-posto-id="${p.id}"><div class="unit-card-head"><span class="unit-icon">+</span><button class="icon-btn row-icon-btn" data-action="edit-posto">✎</button></div><h3>${escapeHtml(p.nome)}</h3><p>${escapeHtml([p.sigla, p.cnes ? `CNES ${p.cnes}` : ''].filter(Boolean).join(' · ') || 'Sem sigla/CNES informado')}</p><div class="unit-meta"><span class="status-chip${p.ativo === false ? ' off' : ''}">${p.ativo === false ? 'Inativo' : 'Ativo'}</span><span class="mini-badge">${patients} pacientes</span><span class="mini-badge">${nurse ? `Enf. ${escapeHtml(nurse.nome || nurse.email || 'Responsável')}` : 'Sem enfermeira responsável'}</span></div></article>`;
+    const nurses = activeNursesForPosto(p.id);
+    const nurseText = nurses.length
+      ? `${nurses.length} enfermeira${nurses.length === 1 ? '' : 's'} vinculada${nurses.length === 1 ? '' : 's'}`
+      : 'Sem enfermeira vinculada';
+    return `<article class="unit-card" data-posto-id="${p.id}"><div class="unit-card-head"><span class="unit-icon">+</span><button class="icon-btn row-icon-btn" data-action="edit-posto">✎</button></div><h3>${escapeHtml(p.nome)}</h3><p>${escapeHtml([p.sigla, p.cnes ? `CNES ${p.cnes}` : ''].filter(Boolean).join(' · ') || 'Sem sigla/CNES informado')}</p><div class="unit-meta"><span class="status-chip${p.ativo === false ? ' off' : ''}">${p.ativo === false ? 'Inativo' : 'Ativo'}</span><span class="mini-badge">${patients} pacientes</span><span class="mini-badge">${nurseText}</span></div></article>`;
   }).join('') : '<div class="empty-state"><div class="empty-icon">+</div><h3>Nenhum posto cadastrado</h3><p>Cadastre a primeira unidade e depois vincule a enfermeira responsável.</p></div>';
 }
 
@@ -78,15 +76,15 @@ function openUser(user = null) {
   $('#newUserPasswordField').classList.toggle('hidden', Boolean(user));
   $('#newUserPassword').required = !user;
   const nurseOption = $('#newUserRole option[value="posto"]');
-  if (nurseOption) nurseOption.textContent = 'Enfermeira responsável';
+  if (nurseOption) nurseOption.textContent = 'Enfermeira do posto';
   $('#newUserRole').value = user?.role || 'posto';
   fillPostoSelect($('#newUserPosto'));
   $('#newUserPosto').value = user?.postoId || '';
   $('#newUserAtivo').checked = user?.ativo !== false;
   $('#userModalTitle').textContent = user ? 'Editar usuário' : 'Novo usuário';
   $('#userFormHint').textContent = user
-    ? 'A enfermeira fica vinculada a um único posto. O e-mail e a senha do Firebase Authentication não são alterados por esta tela.'
-    : 'Cada posto pode ter uma enfermeira responsável ativa. Ela poderá cadastrar e acompanhar os pacientes somente da própria unidade.';
+    ? 'A enfermeira fica vinculada a um único posto. Um mesmo posto pode ter várias enfermeiras ativas. O e-mail e a senha do Firebase Authentication não são alterados por esta tela.'
+    : 'Cadastre quantas enfermeiras forem necessárias e vincule cada uma ao posto onde trabalha. Todas poderão acompanhar os pacientes da própria unidade.';
   syncUserRoleField();
   openModal('userModal');
 }
@@ -96,7 +94,7 @@ function syncUserRoleField() {
   $('#newUserPostoField').classList.toggle('hidden', admin);
   $('#newUserPosto').required = !admin;
   const label = $('#newUserPostoField span');
-  if (label) label.textContent = admin ? 'Posto' : 'Posto de responsabilidade *';
+  if (label) label.textContent = admin ? 'Posto' : 'Posto de atuação *';
 }
 
 async function saveUser(event) {
@@ -113,23 +111,33 @@ async function saveUser(event) {
   if (!nome || !role || (role === 'posto' && !postoId)) return showUserError('Preencha os campos obrigatórios.');
   if (uid === state.firebaseUser.uid && (role !== 'admin' || !ativo)) return showUserError('O administrador conectado não pode remover o próprio acesso administrativo nem desativar a própria conta.');
 
-  if (role === 'posto' && ativo) {
-    const conflict = nurseConflictForPosto(postoId, uid);
-    if (conflict) {
-      return showUserError(`O posto ${getPostoName(postoId)} já possui uma enfermeira responsável ativa: ${conflict.nome || conflict.email}. Edite ou desative esse vínculo antes de trocar a responsável.`);
-    }
+  const posto = role === 'posto' ? state.postos.find((item) => item.id === postoId) : null;
+  if (role === 'posto' && (!posto || posto.ativo === false)) {
+    return showUserError('Selecione um posto de saúde ativo para esta enfermeira.');
   }
 
-  const cargo = role === 'posto' ? 'enfermeira_responsavel' : 'administrador';
+  const cargo = role === 'posto' ? 'enfermeira' : 'administrador';
+  const postoNome = posto?.nome || '';
+  const postoAtivo = role === 'posto' ? posto?.ativo !== false : null;
 
   if (uid) {
     try {
-      await updateDoc(doc(db, 'usuarios', uid), { nome, role, cargo, postoId, ativo, atualizadoEm: serverTimestamp() });
+      await updateDoc(doc(db, 'usuarios', uid), {
+        nome,
+        email,
+        role,
+        cargo,
+        postoId,
+        postoNome,
+        postoAtivo,
+        ativo,
+        atualizadoEm: serverTimestamp()
+      });
       closeModal('userModal');
-      await loadUsers();
+      await loadUsers(true);
       renderUsers();
       renderPostos();
-      showToast(role === 'posto' ? 'Enfermeira responsável atualizada.' : 'Usuário atualizado.');
+      showToast(role === 'posto' ? 'Acesso da enfermeira atualizado.' : 'Usuário atualizado.');
     } catch (error) {
       showUserError(firebaseMessage(error));
     }
@@ -140,26 +148,49 @@ async function saveUser(event) {
   if (!email || password.length < 6) return showUserError('Informe um e-mail válido e uma senha inicial com pelo menos 6 caracteres.');
   let secondaryApp;
   let credential;
+  let profileCreated = false;
   try {
     secondaryApp = initializeApp(firebaseConfig, `user-create-${Date.now()}`);
     const secondaryAuth = getAuth(secondaryApp);
     credential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await setDoc(doc(db, 'usuarios', credential.user.uid), {
-      nome, email, role, cargo, postoId, ativo,
+
+    const profileRef = doc(db, 'usuarios', credential.user.uid);
+    await setDoc(profileRef, {
+      nome,
+      email,
+      role,
+      cargo,
+      postoId,
+      postoNome,
+      postoAtivo,
+      ativo,
       criadoEm: serverTimestamp(),
       atualizadoEm: serverTimestamp()
     });
+    profileCreated = true;
+
+    const verification = await getDoc(profileRef);
+    const saved = verification.exists() ? verification.data() : null;
+    if (!saved || saved.role !== role || saved.ativo !== ativo || (role === 'posto' && saved.postoId !== postoId)) {
+      const verificationError = new Error('O perfil foi criado, mas a validação do vínculo falhou. Edite este usuário antes de entregar o acesso.');
+      verificationError.code = 'exrisco/profile-verification';
+      throw verificationError;
+    }
+
     closeModal('userModal');
-    await loadUsers();
+    await loadUsers(true);
     renderUsers();
     renderPostos();
-    showToast(role === 'posto' ? 'Enfermeira responsável criada e vinculada ao posto.' : 'Usuário criado com sucesso.');
+    showToast(role === 'posto'
+      ? 'Enfermeira criada. Ela já pode entrar com o e-mail e a senha cadastrados.'
+      : 'Administrador criado. Ele já pode entrar no sistema.');
   } catch (error) {
     console.error(error);
-    if (credential?.user) {
-      try { await deleteUser(credential.user); } catch (cleanupError) { console.warn('Não foi possível remover a conta criada após falha no perfil.', cleanupError); }
+    if (credential?.user && !profileCreated) {
+      try { await deleteUser(credential.user); }
+      catch (cleanupError) { console.warn('Não foi possível remover a conta criada após falha no perfil.', cleanupError); }
     }
-    showUserError(firebaseMessage(error));
+    showUserError(error?.code === 'exrisco/profile-verification' ? error.message : firebaseMessage(error));
   } finally {
     if (secondaryApp) { try { await deleteApp(secondaryApp); } catch (_) {} }
   }
