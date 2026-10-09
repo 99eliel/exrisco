@@ -98,8 +98,11 @@ renderPostos = function optimizedRenderPostos() {
   if (state.profile?.role !== 'admin') return;
   $('#postosGrid').innerHTML = state.postos.length ? state.postos.map((p) => {
     const total = Number(p.metricas?.totalAtivos || 0);
-    const nurse = responsibleNurseForPosto(p.id);
-    return `<article class="unit-card" data-posto-id="${p.id}"><div class="unit-card-head"><span class="unit-icon">+</span><button class="icon-btn row-icon-btn" data-action="edit-posto">✎</button></div><h3>${escapeHtml(p.nome)}</h3><p>${escapeHtml([p.sigla, p.cnes ? `CNES ${p.cnes}` : ''].filter(Boolean).join(' · ') || 'Sem sigla/CNES informado')}</p><div class="unit-meta"><span class="status-chip${p.ativo === false ? ' off' : ''}">${p.ativo === false ? 'Inativo' : 'Ativo'}</span><span class="mini-badge">${total} pacientes</span><span class="mini-badge">${nurse ? `Enf. ${escapeHtml(nurse.nome || nurse.email || 'Responsável')}` : 'Enfermeira carregada ao abrir a gestão'}</span></div></article>`;
+    const nurses = activeNursesForPosto(p.id);
+    const nurseText = state.opt.usersLoaded
+      ? (nurses.length ? `${nurses.length} enfermeira${nurses.length === 1 ? '' : 's'} vinculada${nurses.length === 1 ? '' : 's'}` : 'Sem enfermeira vinculada')
+      : 'Enfermeiras carregadas ao abrir a gestão';
+    return `<article class="unit-card" data-posto-id="${p.id}"><div class="unit-card-head"><span class="unit-icon">+</span><button class="icon-btn row-icon-btn" data-action="edit-posto">✎</button></div><h3>${escapeHtml(p.nome)}</h3><p>${escapeHtml([p.sigla, p.cnes ? `CNES ${p.cnes}` : ''].filter(Boolean).join(' · ') || 'Sem sigla/CNES informado')}</p><div class="unit-meta"><span class="status-chip${p.ativo === false ? ' off' : ''}">${p.ativo === false ? 'Inativo' : 'Ativo'}</span><span class="mini-badge">${total} pacientes</span><span class="mini-badge">${nurseText}</span></div></article>`;
   }).join('') : '<div class="empty-state"><div class="empty-icon">+</div><h3>Nenhum posto cadastrado</h3><p>Cadastre a primeira unidade e depois vincule a enfermeira responsável.</p></div>';
 };
 
