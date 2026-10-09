@@ -48,7 +48,7 @@ setPersistence(auth, browserLocalPersistence).catch(console.warn);
 
 window.EXRiscoFirebase = {
   firebaseConfig, auth, db,
-  initializeApp, deleteApp, getAuth,
+  initializeApp, deleteApp, getAuth, getFirestore,
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
   createUserWithEmailAndPassword, deleteUser,
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, writeBatch,
