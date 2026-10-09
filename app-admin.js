@@ -177,6 +177,28 @@ async function saveUser(event) {
       throw verificationError;
     }
 
+    // Testa o acesso com a própria sessão recém-criada. Assim o administrador
+    // só recebe "pronto para entrar" quando as regras publicadas realmente
+    // permitem que a enfermeira leia seu perfil, seu posto e o índice da rede.
+    if (role === 'posto' && ativo) {
+      try {
+        const secondaryDb = getFirestore(secondaryApp);
+        const ownProfile = await getDoc(doc(secondaryDb, 'usuarios', credential.user.uid));
+        if (!ownProfile.exists()) throw new Error('Perfil não encontrado na sessão da enfermeira.');
+        const ownPost = await getDoc(doc(secondaryDb, 'postos', postoId));
+        if (!ownPost.exists()) throw new Error('Posto vinculado não encontrado.');
+        await getDocs(query(
+          collection(secondaryDb, 'pacientes_index'),
+          window.EXRiscoFirebase.limit(1)
+        ));
+      } catch (accessError) {
+        console.error('Validação real do acesso da enfermeira falhou.', accessError);
+        const validationError = new Error('A conta e o perfil foram criados, mas as regras publicadas do Firestore estão bloqueando o acesso da enfermeira. Publique o firestore-rules.txt atual do EXRisco e depois ela poderá entrar com esta mesma conta.');
+        validationError.code = 'exrisco/access-validation';
+        throw validationError;
+      }
+    }
+
     closeModal('userModal');
     await loadUsers(true);
     renderUsers();
@@ -190,7 +212,13 @@ async function saveUser(event) {
       try { await deleteUser(credential.user); }
       catch (cleanupError) { console.warn('Não foi possível remover a conta criada após falha no perfil.', cleanupError); }
     }
-    showUserError(error?.code === 'exrisco/profile-verification' ? error.message : firebaseMessage(error));
+    if (error?.code === 'exrisco/access-validation') {
+      closeModal('userModal');
+      try { await loadUsers(true); renderUsers(); renderPostos(); } catch (_) {}
+      showToast(error.message, 'error');
+    } else {
+      showUserError(error?.code === 'exrisco/profile-verification' ? error.message : firebaseMessage(error));
+    }
   } finally {
     if (secondaryApp) { try { await deleteApp(secondaryApp); } catch (_) {} }
   }
