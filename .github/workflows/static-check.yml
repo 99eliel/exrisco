@@ -98,6 +98,19 @@ jobs:
           grep -Fq "data.pacienteId || d.id" app-opt-core.js
           grep -Fq "optimizedIdentityConflict" app-opt-core.js
 
+      - name: Guard no-followup patient flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "optStartFollowupFromIndex" app-opt-core.js
+          grep -Fq "optFindExistingFollowupForIndex" app-opt-core.js
+          grep -Fq "optCollapseLegacyIndexAliases" app-opt-core.js
+          grep -Fq "Adicionar acompanhamento" app-opt-core.js
+          if grep -Fq "O acompanhamento não foi encontrado." app-opt-core.js; then
+            echo "Base-only patients must open the follow-up flow instead of returning a missing-followup error"
+            exit 1
+          fi
+
       - name: Guard automatic PWA update
         shell: bash
         run: |
