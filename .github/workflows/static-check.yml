@@ -88,6 +88,16 @@ jobs:
             exit 1
           fi
 
+      - name: Guard patient group merge
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "reusedExisting" app-opt-write.js
+          grep -Fq "networkIndexId" app-opt-write.js
+          grep -Fq "aliasDe" app-opt-write.js
+          grep -Fq "data.pacienteId || d.id" app-opt-core.js
+          grep -Fq "optimizedIdentityConflict" app-opt-core.js
+
       - name: Guard automatic PWA update
         shell: bash
         run: |
