@@ -8,7 +8,7 @@ const {
 } = window.EXRiscoFirebase;
 
 const CALCULATOR_URL = 'https://calculadora-risco.saude.go.gov.br/';
-const VERSION = '1.5.1';
+const VERSION = '1.5.2';
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
