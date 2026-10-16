@@ -286,6 +286,28 @@ function optEnsurePager() {
 const optLegacyRenderPatients = renderPatients;
 function optRenderPatientListNow() {
   optLegacyRenderPatients();
+
+  // Deixa claro quando o registro ainda existe somente na base/diretório.
+  for (const patient of state.patients) {
+    if (patient.pacienteId || patient.acompanhamentoAtivo !== false) continue;
+    const row = document.querySelector(`#patientsTableBody tr[data-patient-id="${CSS.escape(String(patient.id))}"]`);
+    const edit = row?.querySelector('[data-action="edit"]');
+    if (edit) {
+      edit.title = 'Adicionar acompanhamento';
+      edit.setAttribute('aria-label', 'Adicionar acompanhamento');
+    }
+    const history = row?.querySelector('[data-action="history"]');
+    if (history) {
+      history.disabled = true;
+      history.title = 'Ainda não há histórico de acompanhamento';
+    }
+    const toggle = row?.querySelector('[data-action="toggle"]');
+    if (toggle) {
+      toggle.disabled = true;
+      toggle.title = 'O cidadão ainda não possui acompanhamento para arquivar';
+    }
+  }
+
   const loaded = state.patients.length;
   if ($('#patientCount')) $('#patientCount').textContent = state.opt.patientHasMore ? `${loaded}+ pacientes carregados` : `${loaded} ${loaded === 1 ? 'paciente' : 'pacientes'}`;
   optEnsurePager();
@@ -386,15 +408,54 @@ identityConflict = async function optimizedIdentityConflict(cpf, cns, ignore = '
 };
 
 const optNetworkOpenPatient = openPatient;
+
+function optStartFollowupFromIndex(patient) {
+  const source = {
+    ...patient,
+    id: patient._indexId || patient.id,
+    pacienteId: patient.pacienteId || null
+  };
+  startNetworkPatient(source);
+
+  const title = $('#patientModalTitle');
+  if (title) title.textContent = state.profile?.role === 'posto'
+    ? 'Iniciar acompanhamento'
+    : 'Adicionar acompanhamento';
+
+  const saveButton = $('#savePatientBtn');
+  if (saveButton) saveButton.textContent = state.profile?.role === 'posto'
+    ? 'Salvar acompanhamento'
+    : 'Salvar paciente';
+
+  showToast('Este cidadão ainda não possui acompanhamento. Selecione um ou mais grupos e salve.');
+}
+
 openPatient = async function optimizedOpenPatient(patient = null) {
   if (patient?._summaryOnly) {
+    // Registro vindo apenas do diretório/base: ainda não existe prontuário clínico.
+    // Em vez de acusar erro, inicia o primeiro acompanhamento usando os dados já conhecidos.
+    if (!patient.pacienteId || patient.acompanhamentoAtivo === false) {
+      optStartFollowupFromIndex(patient);
+      return;
+    }
+
     try {
-      let full = state.opt.fullPatients.get(patient.id);
+      const patientId = patient.pacienteId || patient.id;
+      let full = state.opt.fullPatients.get(patientId);
       if (!full) {
-        const snap = await getDoc(doc(db, 'pacientes', patient.id));
-        if (!snap.exists()) return showToast('O acompanhamento não foi encontrado.', 'error');
-        full = { id: snap.id, ...snap.data() };
-        state.opt.fullPatients.set(patient.id, full);
+        const snap = await getDoc(doc(db, 'pacientes', patientId));
+        if (!snap.exists()) {
+          // Índice legado/inconsistente: reaproveita o cadastro-base e permite
+          // recriar o acompanhamento sem perder a identidade do cidadão.
+          optStartFollowupFromIndex(patient);
+          return;
+        }
+        full = {
+          id: snap.id,
+          ...snap.data(),
+          networkIndexId: snap.data().networkIndexId || patient._indexId || patientId
+        };
+        state.opt.fullPatients.set(patientId, full);
       }
       return optNetworkOpenPatient(full);
     } catch (error) {
