@@ -2,27 +2,98 @@ savePatient = async function optimizedSavePatient(event) {
   event.preventDefault();
   const message = $('#patientFormMessage');
   message.classList.add('hidden');
-  const id = $('#patientId').value;
+
+  const formPatientId = $('#patientId').value;
   const nome = $('#patientName').value.trim();
   const cpf = maskCpf($('#patientCpf').value);
   const cpfNormalizado = cpf.replace(/\D/g, '');
   const cns = String($('#patientCns')?.value || '').replace(/\D/g, '');
   const dataNascimento = $('#patientBirth').value;
   const postoId = state.profile.role === 'admin' ? $('#patientPosto').value : state.profile.postoId;
-  const { programas, dados } = collectProgramData();
-  const pending = state.pendingNetworkRecord;
+  const collected = collectProgramData();
+  let programas = collected.programas;
+  let dados = collected.dados;
+  let source = state.pendingNetworkRecord || null;
 
   if (!nome || !dataNascimento || !postoId) return showPatientError('Preencha nome, data de nascimento e posto de saúde.');
   if (!programas.length) return showPatientError('Selecione pelo menos um acompanhamento.');
   if (cns && cns.length !== 15) return showPatientError('O CNS deve conter 15 dígitos.');
 
-  let old = id ? (state.opt.fullPatients.get(id) || state.patients.find((p) => p.id === id)) : null;
-  const oldCpf = String(old?.cpfNormalizado || '').replace(/\D/g, '');
-  const oldCns = String(old?.cnsNormalizado || old?.cns || '').replace(/\D/g, '');
-  if (!id || oldCpf !== cpfNormalizado || oldCns !== cns) {
+  let patientId = formPatientId;
+  let old = patientId ? (state.opt.fullPatients.get(patientId) || state.patients.find((p) => p.id === patientId)) : null;
+  let reusedExisting = false;
+
+  // Em condições normais openPatient() já deixa o prontuário completo em cache.
+  // Este fallback evita tratar um resumo de índice como prontuário durante o salvamento.
+  if (patientId && old?._summaryOnly) {
     try {
-      const hit = await identityConflict(cpfNormalizado, cns, pending?.id || id || '');
-      if (hit) return showPatientError(`Este cidadão já existe na rede e está vinculado a ${hit.postoNome || 'outro posto'}. Use “Buscar cidadão”.`);
+      const oldSnap = await getDoc(doc(db, 'pacientes', patientId));
+      if (oldSnap.exists()) {
+        old = { id: oldSnap.id, ...oldSnap.data() };
+        state.opt.fullPatients.set(patientId, old);
+      }
+    } catch (error) {
+      return showPatientError(firebaseMessage(error));
+    }
+  }
+
+  const oldCpf = String(old?.cpfNormalizado || old?.cpf || '').replace(/\D/g, '');
+  const oldCns = String(old?.cnsNormalizado || old?.cns || '').replace(/\D/g, '');
+  const identifiersChanged = Boolean(old) && (oldCpf !== cpfNormalizado || oldCns !== cns);
+
+  // Só consulta duplicidade ao criar um vínculo ou quando CPF/CNS realmente mudaram.
+  // IDs do prontuário, índice canônico e registro-base são ignorados como a mesma pessoa.
+  if (!patientId || identifiersChanged) {
+    try {
+      const ignoreIds = [
+        patientId,
+        old?.networkIndexId,
+        source?.id,
+        source?.pacienteId
+      ].filter(Boolean);
+      const hit = await identityConflict(cpfNormalizado, cns, ignoreIds);
+
+      if (hit) {
+        const samePosto = hit.postoId === postoId;
+        const hitPatientId = String(hit.pacienteId || '');
+
+        if (!samePosto) {
+          return showPatientError(`Este cidadão já existe na rede e está vinculado a ${hit.postoNome || 'outro posto'}. Use “Buscar paciente”.`);
+        }
+
+        // Cadastro novo de alguém que já possui prontuário na mesma unidade:
+        // reutiliza o prontuário e soma os acompanhamentos em vez de duplicar a pessoa.
+        if (!patientId && hitPatientId) {
+          const existingSnap = await getDoc(doc(db, 'pacientes', hitPatientId));
+          if (existingSnap.exists()) {
+            old = { id: existingSnap.id, ...existingSnap.data() };
+            patientId = existingSnap.id;
+            reusedExisting = true;
+            source = hit;
+
+            const mergedPrograms = [...new Set([...(old.programas || []), ...programas])];
+            const mergedData = { ...(old.dados || {}) };
+            for (const program of programas) {
+              mergedData[program] = {
+                ...(old.dados?.[program] || {}),
+                ...(dados[program] || {})
+              };
+            }
+            programas = mergedPrograms;
+            dados = mergedData;
+          }
+        } else if (!patientId && !hitPatientId) {
+          // Cidadão existe apenas no diretório/base. Usa esse índice como origem.
+          source = hit;
+        } else if (patientId) {
+          // Índices antigos podem ter deixado um registro-base sem pacienteId.
+          // Na mesma unidade ele é um alias da própria pessoa, não um conflito.
+          if (hitPatientId && hitPatientId !== patientId) {
+            return showPatientError('Já existe outro prontuário desta unidade usando o mesmo CPF/CNS. Procure o administrador antes de continuar.');
+          }
+          if (!hitPatientId) source = hit;
+        }
+      }
     } catch (error) {
       return showPatientError(firebaseMessage(error));
     }
@@ -30,6 +101,13 @@ savePatient = async function optimizedSavePatient(event) {
 
   const derived = derivePatient(programas, dados);
   const active = old ? old.ativo !== false : true;
+  const targetRef = patientId ? doc(db, 'pacientes', patientId) : doc(collection(db, 'pacientes'));
+  patientId = targetRef.id;
+
+  // Para cidadãos iniciados a partir da base, mantém o índice original como canônico.
+  // Para prontuários antigos sem esse vínculo explícito, preserva o índice pelo patientId.
+  const networkIndexId = old?.networkIndexId || (!old && source?.id) || patientId;
+
   const basePayload = {
     nome,
     nomeBusca: normalizeText(nome),
@@ -42,6 +120,7 @@ savePatient = async function optimizedSavePatient(event) {
     programas,
     dados,
     ...derived,
+    networkIndexId,
     ativo: active,
     atualizadoEm: serverTimestamp(),
     atualizadoPor: state.firebaseUser.uid
@@ -49,17 +128,45 @@ savePatient = async function optimizedSavePatient(event) {
 
   $('#savePatientBtn').disabled = true;
   try {
-    const patientRef = id ? doc(db, 'pacientes', id) : doc(collection(db, 'pacientes'));
-    const patientId = patientRef.id;
     const localPatient = { id: patientId, ...basePayload };
-    const summary = { id: patientId, _summaryOnly: true, ...optIndexPayload(localPatient, pending) };
-    // Timestamps sentinela não entram no estado local.
+    const indexPayload = optIndexPayload(localPatient, source);
+    const summary = { id: patientId, _indexId: networkIndexId, _summaryOnly: true, ...indexPayload };
     delete summary.atualizadoEm;
 
     const batch = optBatch(db);
-    if (id) batch.update(patientRef, basePayload);
-    else batch.set(patientRef, { ...basePayload, criadoEm: serverTimestamp(), criadoPor: state.firebaseUser.uid, origemTipo: pending?.origemTipo || 'cadastro_manual' });
-    batch.set(doc(db, 'pacientes_index', patientId), optIndexPayload(localPatient, pending), { merge: true });
+    if (old) {
+      batch.update(targetRef, basePayload);
+    } else {
+      batch.set(targetRef, {
+        ...basePayload,
+        criadoEm: serverTimestamp(),
+        criadoPor: state.firebaseUser.uid,
+        origemTipo: source?.origemTipo || 'cadastro_manual'
+      });
+    }
+
+    batch.set(doc(db, 'pacientes_index', networkIndexId), indexPayload, { merge: true });
+
+    // Repara o falso duplicado gerado por versões antigas: se encontramos um
+    // registro-base da mesma pessoa e o prontuário já usa outro índice, o antigo
+    // deixa de participar das buscas e filtros, mas permanece no Firestore para auditoria.
+    if (old && source?.id && source.id !== networkIndexId && !source.pacienteId) {
+      batch.set(doc(db, 'pacientes_index', source.id), {
+        pacienteId,
+        acompanhamentoAtivo: false,
+        ativo: false,
+        aliasDe: networkIndexId,
+        nomeBusca: `~alias~${source.id}`,
+        postoNomeBusca: `~alias~${source.id}`,
+        cpfNormalizado: '',
+        cnsNormalizado: '',
+        programas: [],
+        consultaKeys: ['alias'],
+        retornoKey: '',
+        postoRetornoKey: '',
+        atualizadoEm: serverTimestamp()
+      }, { merge: true });
+    }
 
     const oldPosto = old?.postoId || null;
     if (oldPosto && oldPosto !== postoId) {
@@ -69,22 +176,46 @@ savePatient = async function optimizedSavePatient(event) {
       optApplyPostMetricBatch(batch, postoId, optMetricDelta(old, localPatient));
     }
 
-    const historyRef = doc(collection(db, 'historico'));
-    batch.set(historyRef, {
+    const beforePrograms = new Set(old?.programas || []);
+    const afterPrograms = new Set(programas);
+    const addedPrograms = [...afterPrograms].filter((key) => !beforePrograms.has(key));
+    const removedPrograms = [...beforePrograms].filter((key) => !afterPrograms.has(key));
+    const labelPrograms = (keys) => keys.map((key) => PROGRAMS[key]?.label || key).join(', ');
+
+    let action = old ? 'edição' : 'criação';
+    let historySummary = old
+      ? `Cadastro e acompanhamento atualizados para ${nome}.`
+      : `Paciente ${nome} cadastrado no sistema.`;
+
+    if (reusedExisting && addedPrograms.length) {
+      action = 'acompanhamento';
+      historySummary = `Novo acompanhamento adicionado: ${labelPrograms(addedPrograms)}.`;
+    } else if (old && (addedPrograms.length || removedPrograms.length)) {
+      action = 'acompanhamento';
+      const changes = [];
+      if (addedPrograms.length) changes.push(`adicionado: ${labelPrograms(addedPrograms)}`);
+      if (removedPrograms.length) changes.push(`removido: ${labelPrograms(removedPrograms)}`);
+      historySummary = `Grupos de acompanhamento atualizados — ${changes.join(' · ')}.`;
+    }
+
+    batch.set(doc(collection(db, 'historico')), {
       patientId,
       postoId,
-      acao: id ? 'edição' : 'criação',
-      resumo: id ? `Cadastro e acompanhamento atualizados para ${nome}.` : `Paciente ${nome} cadastrado no sistema.`,
+      acao: action,
+      resumo: historySummary,
       userId: state.firebaseUser.uid,
       userName: state.profile.nome || state.firebaseUser.email,
       criadoEm: serverTimestamp()
     });
+
     await batch.commit();
 
     if (oldPosto && oldPosto !== postoId) {
       optApplyLocalPostMetrics(oldPosto, optMetricDelta(old, null));
       optApplyLocalPostMetrics(postoId, optMetricDelta(null, localPatient));
-    } else optApplyLocalPostMetrics(postoId, optMetricDelta(old, localPatient));
+    } else {
+      optApplyLocalPostMetrics(postoId, optMetricDelta(old, localPatient));
+    }
 
     state.opt.fullPatients.set(patientId, { id: patientId, ...basePayload });
     optUpdateLocalPatientSummary(summary);
@@ -95,7 +226,12 @@ savePatient = async function optimizedSavePatient(event) {
     optRenderPatientListNow();
     renderDashboard();
     renderPostos();
-    showToast(id ? 'Paciente atualizado com sucesso.' : 'Paciente cadastrado com sucesso.');
+
+    if (reusedExisting && addedPrograms.length) {
+      showToast(`Paciente já existente. ${labelPrograms(addedPrograms)} foi adicionado ao mesmo prontuário.`);
+    } else {
+      showToast(old ? 'Acompanhamento salvo com sucesso.' : 'Paciente cadastrado com sucesso.');
+    }
   } catch (error) {
     console.error(error);
     showPatientError(firebaseMessage(error));
