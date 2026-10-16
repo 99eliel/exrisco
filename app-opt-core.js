@@ -240,7 +240,15 @@ async function optQueryPatientPage(reset = false) {
       q = query(index, ...constraints);
     }
     const snap = await getDocs(q);
-    let rows = snap.docs.map((d) => ({ id: d.id, _summaryOnly: true, ...d.data() }));
+    let rows = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        id: data.pacienteId || d.id,
+        _indexId: d.id,
+        _summaryOnly: true,
+        ...data
+      };
+    });
     rows = rows.filter((p) => optMatchesLoadedFilter(p, filter));
     rows.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
     if (reset) state.patients = rows;
@@ -328,18 +336,42 @@ findNetwork = async function optimizedFindNetwork(value) {
     q = query(index, optOrderBy('nomeBusca'), optStartAt(t), optEndAt(t + '\uf8ff'), optLimit(OPT_SEARCH_LIMIT));
   }
   const snap = await getDocs(q);
-  const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
+  const raw = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const byIdentity = new Map();
+  for (const row of raw) {
+    const identityKey = row.cpfNormalizado
+      ? `cpf:${row.cpfNormalizado}`
+      : (row.cnsNormalizado ? `cns:${row.cnsNormalizado}` : `id:${row.id}`);
+    const current = byIdentity.get(identityKey);
+    if (!current || (row.acompanhamentoAtivo && !current.acompanhamentoAtivo)) byIdentity.set(identityKey, row);
+  }
+  const rows = [...byIdentity.values()].sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
   state.opt.networkCache.set(cacheKey, rows);
   return rows;
 };
 
 identityConflict = async function optimizedIdentityConflict(cpf, cns, ignore = '') {
+  const ignored = new Set(
+    (Array.isArray(ignore) ? ignore : [ignore])
+      .filter(Boolean)
+      .map((value) => String(value))
+  );
   const checks = [];
   if (cpf) checks.push(['cpfNormalizado', cpf]);
   if (cns) checks.push(['cnsNormalizado', cns]);
+
   for (const [field, value] of checks) {
-    const snap = await getDocs(query(collection(db, 'pacientes_index'), where(field, '==', value), optLimit(2)));
-    const hit = snap.docs.find((d) => d.id !== ignore);
+    const snap = await getDocs(query(
+      collection(db, 'pacientes_index'),
+      where(field, '==', value),
+      optLimit(5)
+    ));
+    const hit = snap.docs.find((d) => {
+      const data = d.data();
+      return !ignored.has(d.id)
+        && !ignored.has(String(data.pacienteId || ''))
+        && !ignored.has(String(data.networkIndexId || ''));
+    });
     if (hit) return { id: hit.id, ...hit.data() };
   }
   return null;
