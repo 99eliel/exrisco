@@ -83,8 +83,29 @@ savePatient = async function optimizedSavePatient(event) {
             dados = mergedData;
           }
         } else if (!patientId && !hitPatientId) {
-          // Cidadão existe apenas no diretório/base. Usa esse índice como origem.
-          source = hit;
+          // Compatibilidade com índices antigos: antes de assumir que é apenas
+          // cadastro-base, verifica se já existe um prontuário com o mesmo ID.
+          const legacySnap = await getDoc(doc(db, 'pacientes', hit.id));
+          if (legacySnap.exists()) {
+            old = { id: legacySnap.id, ...legacySnap.data() };
+            patientId = legacySnap.id;
+            reusedExisting = true;
+            source = hit;
+
+            const mergedPrograms = [...new Set([...(old.programas || []), ...programas])];
+            const mergedData = { ...(old.dados || {}) };
+            for (const program of programas) {
+              mergedData[program] = {
+                ...(old.dados?.[program] || {}),
+                ...(dados[program] || {})
+              };
+            }
+            programas = mergedPrograms;
+            dados = mergedData;
+          } else {
+            // Cidadão existe apenas no diretório/base. Usa esse índice como origem.
+            source = hit;
+          }
         } else if (patientId) {
           // Índices antigos podem ter deixado um registro-base sem pacienteId.
           // Na mesma unidade ele é um alias da própria pessoa, não um conflito.
