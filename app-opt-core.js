@@ -173,6 +173,47 @@ function optFilterKey(filter) {
   return parts.join('|');
 }
 
+function optCollapseLegacyIndexAliases(rows = []) {
+  const output = [];
+  const byStrongIdentity = new Map();
+  const byNameBirth = new Map();
+
+  for (const row of rows) {
+    const cpf = String(row.cpfNormalizado || '').replace(/\D/g, '');
+    const cns = String(row.cnsNormalizado || '').replace(/\D/g, '');
+    const strongKey = cpf ? `cpf:${cpf}` : (cns ? `cns:${cns}` : '');
+    const nameBirthKey = row.nome && row.dataNascimento
+      ? `nb:${normalizeText(row.nome)}|${row.dataNascimento}`
+      : '';
+
+    const activeFollowup = Boolean(row.acompanhamentoAtivo && row.pacienteId);
+    let existingIndex = -1;
+
+    if (strongKey && byStrongIdentity.has(strongKey)) {
+      existingIndex = byStrongIdentity.get(strongKey);
+    } else if (nameBirthKey && byNameBirth.has(nameBirthKey)) {
+      const candidateIndex = byNameBirth.get(nameBirthKey);
+      const existing = output[candidateIndex];
+      const existingFollowup = Boolean(existing?.acompanhamentoAtivo && existing?.pacienteId);
+      const compatiblePosto = !existing?.postoId || !row.postoId || existing.postoId === row.postoId;
+      if (compatiblePosto && existingFollowup !== activeFollowup) existingIndex = candidateIndex;
+    }
+
+    if (existingIndex >= 0) {
+      const existing = output[existingIndex];
+      const existingFollowup = Boolean(existing?.acompanhamentoAtivo && existing?.pacienteId);
+      if (activeFollowup && !existingFollowup) output[existingIndex] = row;
+      continue;
+    }
+
+    const index = output.push(row) - 1;
+    if (strongKey) byStrongIdentity.set(strongKey, index);
+    if (nameBirthKey) byNameBirth.set(nameBirthKey, index);
+  }
+
+  return output;
+}
+
 function optMatchesLoadedFilter(patient, filter = optCurrentFilter()) {
   if ((filter.status === 'archived') !== (patient.ativo === false)) return false;
   if (filter.posto && patient.postoId !== filter.posto) return false;
@@ -250,6 +291,7 @@ async function optQueryPatientPage(reset = false) {
       };
     });
     rows = rows.filter((p) => optMatchesLoadedFilter(p, filter));
+    rows = optCollapseLegacyIndexAliases(rows);
     rows.sort((a, b) => (a.nome || '').localeCompare(b.nome || '', 'pt-BR'));
     if (reset) state.patients = rows;
     else {
