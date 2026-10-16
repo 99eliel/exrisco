@@ -366,12 +366,20 @@ identityConflict = async function optimizedIdentityConflict(cpf, cns, ignore = '
       where(field, '==', value),
       optLimit(5)
     ));
-    const hit = snap.docs.find((d) => {
+    const candidates = snap.docs.filter((d) => {
       const data = d.data();
       return !ignored.has(d.id)
         && !ignored.has(String(data.pacienteId || ''))
         && !ignored.has(String(data.networkIndexId || ''));
     });
+    candidates.sort((a, b) => {
+      const da = a.data();
+      const db = b.data();
+      const activeA = Number(Boolean(da.acompanhamentoAtivo && da.pacienteId));
+      const activeB = Number(Boolean(db.acompanhamentoAtivo && db.pacienteId));
+      return activeB - activeA;
+    });
+    const hit = candidates[0];
     if (hit) return { id: hit.id, ...hit.data() };
   }
   return null;
