@@ -409,7 +409,68 @@ identityConflict = async function optimizedIdentityConflict(cpf, cns, ignore = '
 
 const optNetworkOpenPatient = openPatient;
 
-function optStartFollowupFromIndex(patient) {
+async function optFindExistingFollowupForIndex(patient) {
+  const sourceIndexId = String(patient._indexId || patient.id || '');
+  const cpf = String(patient.cpfNormalizado || patient.cpf || '').replace(/\D/g, '');
+  const cns = String(patient.cnsNormalizado || patient.cns || '').replace(/\D/g, '');
+
+  // Primeiro tenta documentos fortes (CPF/CNS).
+  if (cpf || cns) {
+    const hit = await identityConflict(cpf, cns, [sourceIndexId, patient.id]);
+    if (hit?.pacienteId) return hit;
+  }
+
+  // Bases antigas podem não ter CPF/CNS. Nesse caso usamos nome exato + nascimento,
+  // mas só reconciliamos automaticamente quando existe um único prontuário ativo.
+  const nomeBusca = normalizeText(patient.nome || '');
+  const nascimento = String(patient.dataNascimento || '');
+  if (!nomeBusca || !nascimento) return null;
+
+  const snap = await getDocs(query(
+    collection(db, 'pacientes_index'),
+    where('nomeBusca', '==', nomeBusca),
+    optLimit(12)
+  ));
+
+  const candidates = snap.docs
+    .filter((d) => d.id !== sourceIndexId)
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((row) => (
+      row.dataNascimento === nascimento
+      && row.acompanhamentoAtivo === true
+      && Boolean(row.pacienteId)
+    ));
+
+  const byPatient = new Map();
+  for (const row of candidates) byPatient.set(row.pacienteId, row);
+  return byPatient.size === 1 ? [...byPatient.values()][0] : null;
+}
+
+async function optStartFollowupFromIndex(patient) {
+  try {
+    const existing = await optFindExistingFollowupForIndex(patient);
+    if (existing?.pacienteId) {
+      if (state.profile?.role === 'posto' && existing.postoId !== state.profile.postoId) {
+        showToast(`Este cidadão já possui acompanhamento em ${existing.postoNome || 'outro posto'}. Use “Buscar paciente” para consultar a unidade responsável.`, 'error');
+        return;
+      }
+
+      const snap = await getDoc(doc(db, 'pacientes', existing.pacienteId));
+      if (snap.exists()) {
+        const full = {
+          id: snap.id,
+          ...snap.data(),
+          networkIndexId: snap.data().networkIndexId || existing.id
+        };
+        state.opt.fullPatients.set(full.id, full);
+        showToast('Já existe um prontuário para este cidadão. Abrindo o cadastro existente para alterar os grupos.');
+        return optNetworkOpenPatient(full);
+      }
+    }
+  } catch (error) {
+    console.warn('Não foi possível reconciliar o cadastro-base antes de abrir.', error);
+  }
+
   const source = {
     ...patient,
     id: patient._indexId || patient.id,
@@ -435,7 +496,7 @@ openPatient = async function optimizedOpenPatient(patient = null) {
     // Registro vindo apenas do diretório/base: ainda não existe prontuário clínico.
     // Em vez de acusar erro, inicia o primeiro acompanhamento usando os dados já conhecidos.
     if (!patient.pacienteId || patient.acompanhamentoAtivo === false) {
-      optStartFollowupFromIndex(patient);
+      await optStartFollowupFromIndex(patient);
       return;
     }
 
@@ -447,7 +508,7 @@ openPatient = async function optimizedOpenPatient(patient = null) {
         if (!snap.exists()) {
           // Índice legado/inconsistente: reaproveita o cadastro-base e permite
           // recriar o acompanhamento sem perder a identidade do cidadão.
-          optStartFollowupFromIndex(patient);
+          await optStartFollowupFromIndex(patient);
           return;
         }
         full = {
