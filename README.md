@@ -181,3 +181,28 @@ O workflow **EXRisco Static Check** verifica a cada alteração no `main`:
 ## Versão
 
 `1.0.2` — estrutura de enfermeira responsável por posto e atualização do PWA.
+
+
+## Alteração administrativa de senha
+
+O frontend do EXRisco permite ao administrador abrir **Usuários e acessos → Senha** e definir uma nova senha para qualquer conta. A senha nunca é gravada no Firestore.
+
+A alteração direta usa a callable Cloud Function `adminSetUserPassword`, localizada em `functions/index.js`. A função valida no Firestore se o solicitante possui perfil `admin` ativo antes de usar o Firebase Admin SDK para alterar a senha e revogar os refresh tokens da conta.
+
+### Publicação inicial da função
+
+A função precisa ser publicada uma vez no projeto Firebase `extratificacao`:
+
+```bash
+npm install -g firebase-tools
+firebase login
+firebase deploy --only functions:adminSetUserPassword --project extratificacao
+```
+
+Também existe o workflow manual **Deploy EXRisco Firebase Function** em GitHub Actions. Para usá-lo, cadastre o secret `FIREBASE_SERVICE_ACCOUNT` com uma credencial de service account autorizada no projeto e execute o workflow manualmente.
+
+Cloud Functions em produção exige que o projeto Firebase esteja no plano Blaze. Enquanto a função não estiver publicada, a tela de senha continua oferecendo **Enviar link por e-mail** como alternativa.
+
+## Atualização automática do PWA
+
+Os computadores que já instalaram o EXRisco não precisam reinstalar o aplicativo a cada versão. O sistema verifica atualizações ao abrir, ao voltar para a aba, ao reconectar e periodicamente durante o uso. Uma nova versão só é aplicada automaticamente quando não há formulário/modal aberto, evitando perder dados em digitação.
