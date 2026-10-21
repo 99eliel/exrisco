@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exrisco-static-v1.5.3';
+const CACHE_NAME = 'exrisco-static-v1.6.0';
 const APP_SHELL = [
   './',
   './index.html',
