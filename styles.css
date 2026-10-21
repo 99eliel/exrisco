@@ -30,3 +30,16 @@
   color: #0f766e;
   background: #e1f1ee;
 }
+
+.access-password-target {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 12px;
+  margin-bottom: 4px;
+  border: 1px solid #dce8e6;
+  border-radius: 10px;
+  background: #f6faf9;
+}
+.access-password-target strong { color: #173d39; }
+.access-password-target span { color: var(--muted); font-size: 10px; }
