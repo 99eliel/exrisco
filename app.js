@@ -7,6 +7,7 @@ import {
   signOut,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
   deleteUser
 } from 'https://www.gstatic.com/firebasejs/12.18.0/firebase-auth.js';
 import {
@@ -50,7 +51,7 @@ window.EXRiscoFirebase = {
   firebaseConfig, auth, db,
   initializeApp, deleteApp, getAuth, getFirestore,
   signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  createUserWithEmailAndPassword, deleteUser,
+  createUserWithEmailAndPassword, sendPasswordResetEmail, deleteUser,
   collection, doc, getDoc, getDocs, addDoc, setDoc, updateDoc, writeBatch,
   query, where, orderBy, startAt, endAt, startAfter, limit,
   getCountFromServer, increment, serverTimestamp
