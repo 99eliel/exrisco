@@ -63,7 +63,7 @@ async function savePosto(event) {
 
 function renderUsers() {
   if (state.profile?.role !== 'admin') return;
-  $('#usersTableBody').innerHTML = state.users.map((u) => `<tr data-user-id="${u.uid}"><td><div class="patient-name"><strong>${escapeHtml(u.nome || 'Sem nome')}</strong><span>${escapeHtml(u.email || '')}</span></div></td><td>${roleLabel(u.role)}</td><td>${u.role === 'admin' ? 'Todos os postos' : escapeHtml(getPostoName(u.postoId))}</td><td><span class="status-chip${u.ativo === false ? ' off' : ''}">${u.ativo === false ? 'Inativo' : 'Ativo'}</span></td><td><div class="row-actions"><button class="icon-btn row-icon-btn" data-action="edit-user" title="Editar">✎</button></div></td></tr>`).join('');
+  $('#usersTableBody').innerHTML = state.users.map((u) => `<tr data-user-id="${u.uid}"><td><div class="patient-name"><strong>${escapeHtml(u.nome || 'Sem nome')}</strong><span>${escapeHtml(u.email || '')}</span></div></td><td>${roleLabel(u.role)}</td><td>${u.role === 'admin' ? 'Todos os postos' : escapeHtml(getPostoName(u.postoId))}</td><td><span class="status-chip${u.ativo === false ? ' off' : ''}">${u.ativo === false ? 'Inativo' : 'Ativo'}</span></td><td><div class="row-actions"><button class="icon-btn row-icon-btn" data-action="password-user" title="Alterar senha" aria-label="Alterar senha">⌘</button><button class="icon-btn row-icon-btn" data-action="edit-user" title="Editar">✎</button></div></td></tr>`).join('');
 }
 
 function openUser(user = null) {
