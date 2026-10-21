@@ -27,6 +27,7 @@ jobs:
             app-idoso.js app-main.js app-access.js app-update.js
             manifest.webmanifest sw.js icon.svg firebase.json
             firestore.rules firestore-rules.txt
+            functions/package.json functions/index.js
           )
           for file in "${required[@]}"; do
             test -s "$file" || { echo "Missing or empty: $file"; exit 1; }
@@ -41,6 +42,7 @@ jobs:
           done
           cp app.js /tmp/exrisco-app.mjs
           node --check /tmp/exrisco-app.mjs
+          node --check functions/index.js
 
       - name: Guard optimized read path
         shell: bash
@@ -108,6 +110,23 @@ jobs:
           grep -Fq "Adicionar acompanhamento" app-opt-core.js
           if grep -Fq "O acompanhamento não foi encontrado." app-opt-core.js; then
             echo "Base-only patients must open the follow-up flow instead of returning a missing-followup error"
+            exit 1
+          fi
+
+      - name: Guard administrative password flow
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq "sendPasswordResetEmail" app.js
+          grep -Fq "password-user" app-admin.js
+          grep -Fq "PASSWORD_FUNCTION_URL" app-access.js
+          grep -Fq "adminSetUserPassword" functions/index.js
+          grep -Fq "actor.role !== 'admin'" functions/index.js
+          grep -Fq "updateUser(uid, { password })" functions/index.js
+          grep -Fq "revokeRefreshTokens(uid)" functions/index.js
+          grep -Fq '"source": "functions"' firebase.json
+          if grep -Eq "password.*(Firestore|setDoc|updateDoc|addDoc)" functions/index.js; then
+            echo "Passwords must never be persisted"
             exit 1
           fi
 
