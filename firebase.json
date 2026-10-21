@@ -11,7 +11,8 @@
       "firestore.rules",
       "firestore-rules.txt",
       "**/.*",
-      "**/node_modules/**"
+      "**/node_modules/**",
+      "functions/**"
     ],
     "cleanUrls": true,
     "trailingSlash": false,
@@ -19,15 +20,34 @@
       {
         "source": "/sw.js",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
         ]
       },
       {
         "source": "/**/*.html",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, must-revalidate"
+          }
         ]
       }
     ]
-  }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "ignore": [
+        ".git",
+        ".runtimeconfig.json",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "node_modules"
+      ]
+    }
+  ]
 }
